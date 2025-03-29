@@ -2,6 +2,7 @@
 import type { Group, Shape } from 'three'
 import { OrbitControls } from '@tresjs/cientos'
 import { TresCanvas } from '@tresjs/core'
+import { useDropZone, useEventListener } from '@vueuse/core'
 import { Box3, Color, Vector3 } from 'three'
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js'
 import { OBJExporter } from 'three/addons/exporters/OBJExporter.js'
@@ -59,14 +60,7 @@ const size = computed({
   },
 })
 
-function handleFileSelect(event: Event) {
-  const inputEl = event.target as HTMLInputElement
-  const file = inputEl.files?.[0]
-  if (!file)
-    return
-  fileName.value = file.name
-  inputEl.value = ''
-
+function readFileAndConvert(file: File) {
   const reader = new FileReader()
   reader.onload = (e) => {
     const svgData = e.target?.result as string
@@ -101,6 +95,65 @@ function handleFileSelect(event: Event) {
   }
   reader.readAsText(file)
 }
+
+const dragEnterCount = ref(0)
+const isGlobalDragging = ref(false)
+useEventListener('dragenter', (e) => {
+  e.preventDefault()
+  dragEnterCount.value++
+  if (dragEnterCount.value === 1) {
+    isGlobalDragging.value = true
+  }
+  const dataTransfer = e.dataTransfer
+  if (!dataTransfer)
+    return
+  dataTransfer.dropEffect = 'copy'
+  if (dataTransfer.files.length && dataTransfer.items[0].type === 'image/svg+xml') {
+    isGlobalDragging.value = true
+  }
+})
+useEventListener('dragover', (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+})
+useEventListener('drop', (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+  isGlobalDragging.value = false
+  dragEnterCount.value = 0
+})
+useEventListener('dragleave', (e) => {
+  e.preventDefault()
+  dragEnterCount.value--
+  if (dragEnterCount.value === 0) {
+    isGlobalDragging.value = false
+  }
+})
+
+function handleFileSelect(event: Event) {
+  const inputEl = event.target as HTMLInputElement
+  const file = inputEl.files?.[0]
+  if (!file)
+    return
+  fileName.value = file.name
+  inputEl.value = ''
+  readFileAndConvert(file)
+}
+
+function onDrop(file: File[] | null) {
+  if (!file || file.length === 0)
+    return
+  fileName.value = file[0].name
+  readFileAndConvert(file[0])
+}
+
+const dropZone = ref<HTMLElement>()
+const { isOverDropZone } = useDropZone(dropZone, {
+  onDrop,
+  dataTypes: ['image/svg+xml'],
+  multiple: false,
+  preventDefaultForUnhandled: true,
+})
 
 /**
  * 解决 Z-fighting 问题
@@ -391,20 +444,34 @@ onMounted(() => {
         Convert SVG files to 3D models
       </p>
     </div>
-    <label flex="~ items-center" p2 border rounded cursor-pointer relative bg="black/10 dark:white/20 hover:black/20 dark:hover:white/30" title="Select SVG File">
+    <label
+      ref="dropZone" flex="~ items-center"
+      p2 border rounded cursor-pointer relative bg="black/10 dark:white/20 hover:black/20 dark:hover:white/30" title="Select SVG File" :class="{
+        'border-dashed !bg-[#b5df4a] min-h-40 justify-center sticky top-10 z-10 shadow-xl': isGlobalDragging,
+        'min-h-40': isOverDropZone,
+      }"
+    >
       <input
         type="file"
         accept=".svg"
         class="op0 inset-0 absolute z--1"
         @change="handleFileSelect"
       >
-      <template v-if="fileName && !isDefaultSvg">
+      <template v-if="isGlobalDragging && isOverDropZone">
+        <span i-carbon:document-add mr-2 inline-block />
+        <span>Drop it!</span>
+      </template>
+      <template v-else-if="isGlobalDragging">
+        <span i-carbon:document-add mr-2 inline-block />
+        <span>Drag to here!</span>
+      </template>
+      <template v-else-if="fileName && !isDefaultSvg">
         <span i-carbon:document mr-2 inline-block />
         <span>{{ fileName }}</span>
       </template>
       <template v-else>
         <span i-carbon:document-add mr-2 inline-block />
-        <span>SVG</span>
+        <span>Click or drop SVG file</span>
       </template>
     </label>
     <template v-if="svgShapes.length && !isDefaultSvg">
@@ -519,7 +586,7 @@ onMounted(() => {
           >
             Download The 3MF File
           </a>
-          <button title="close" text-xl p2 rounded bg-gray cursor-pointer @click="() => { stlUrl = ''; objUrl = ''; gltfUrl = '' }">
+          <button title="close" text-xl p2 rounded bg-gray cursor-pointer @click="() => { stlUrl = ''; objUrl = ''; gltfUrl = ''; the3mfUrl = '' }">
             <div i-carbon:close />
           </button>
         </div>
