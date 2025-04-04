@@ -44,6 +44,25 @@ const shownShapes = computed(() => svgShapes.value.filter(i => i.depth))
 
 const inputRefs = ref<(unknown & { focus: () => void } | null)[]>([])
 
+const svgCode = ref('')
+
+watch(svgCode, (newCode) => {
+  const isNewCodeEmpty = !newCode || newCode.trim() === ''
+
+  isDefaultSvg.value = isNewCodeEmpty
+
+  if (isNewCodeEmpty)
+    return
+
+  if (!isValidSvg(newCode)) {
+    isDefaultSvg.value = true
+    console.error('Invalid SVG code')
+    return
+  }
+
+  mountSVG(newCode)
+})
+
 function mountSVG(svgData: string, customShapes?: (shapes: ShapeWithColor[], index: number) => ShapeWithColor[]) {
   isDefaultSvg.value = false
   svgShapes.value = createShapesWithColor(svgData, {
@@ -146,6 +165,20 @@ function handleMeshClick(index: number) {
 function handleColorChange(index: number, color: string) {
   svgShapes.value[index].color = new Color().setStyle(color)
 }
+
+function isValidSvg(code: string) {
+  if (!code || code.trim() === '')
+    return false
+
+  const lowerCode = code.toLowerCase()
+  const svgStart = lowerCode.indexOf('<svg')
+  const svgEnd = lowerCode.indexOf('</svg>')
+
+  return svgStart !== -1
+    && svgEnd !== -1
+    && svgStart < svgEnd
+    && (lowerCode.includes('viewbox') || lowerCode.includes('width') || lowerCode.includes('height'))
+}
 </script>
 
 <template>
@@ -183,12 +216,30 @@ function handleColorChange(index: number, color: string) {
         Convert SVG files to 3D models
       </p>
     </div>
-    <FileDropZone
-      v-model:filename="fileName"
-      :accept="['image/svg+xml']"
-      default-text="Click or drop SVG file"
-      @file-selected="handleFileSelected"
-    />
+    <div flex="~ col gap-2">
+      <FileDropZone
+        v-model:filename="fileName"
+        :accept="['image/svg+xml']"
+        default-text="Click or drop SVG file"
+        @file-selected="handleFileSelected"
+      />
+      <div flex="~ gap-2 items-center">
+        <hr flex-1>
+        <p text-center op-80>
+          OR
+        </p>
+        <hr flex-1>
+      </div>
+      <textarea
+        v-model="svgCode"
+        name="svg-code"
+        placeholder="Paste SVG code here"
+        bg="black/10 dark:white/20 hover:black/20 dark:hover:white/30"
+        p2
+        border
+        rounded
+      />
+    </div>
     <template v-if="svgShapes.length && !isDefaultSvg">
       <div flex="~ gap-2 items-center">
         <IconInput
