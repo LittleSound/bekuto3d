@@ -48,15 +48,10 @@ const svgCode = ref('')
 
 watch(svgCode, (newCode) => {
   const isNewCodeEmpty = !newCode || newCode.trim() === ''
-
   isDefaultSvg.value = isNewCodeEmpty
 
-  if (isNewCodeEmpty)
-    return
-
-  if (!isValidSvg(newCode)) {
-    isDefaultSvg.value = true
-    console.error('Invalid SVG code')
+  if (isNewCodeEmpty || !isValidSvg(newCode)) {
+    loadDefaultSvg()
     return
   }
 
@@ -217,19 +212,21 @@ function isValidSvg(code: string) {
       </p>
     </div>
     <div flex="~ col gap-2">
-      <FileDropZone
-        v-model:filename="fileName"
-        :accept="['image/svg+xml']"
-        default-text="Click or drop SVG file"
-        @file-selected="handleFileSelected"
-      />
-      <div flex="~ gap-2 items-center">
-        <hr flex-1>
-        <p text-center op-80>
-          OR
-        </p>
-        <hr flex-1>
-      </div>
+      <template v-if="!svgCode">
+        <FileDropZone
+          v-model:filename="fileName"
+          :accept="['image/svg+xml']"
+          default-text="Click or drop SVG file"
+          @file-selected="handleFileSelected"
+        />
+        <div flex="~ gap-2 items-center">
+          <hr flex-1>
+          <p text-center op-80>
+            OR
+          </p>
+          <hr flex-1>
+        </div>
+      </template>
       <textarea
         v-model="svgCode"
         name="svg-code"
