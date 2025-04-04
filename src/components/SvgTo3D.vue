@@ -212,22 +212,22 @@ function isValidSvg(code: string) {
       </p>
     </div>
     <div flex="~ col gap-2">
-      <template v-if="!svgCode">
-        <FileDropZone
-          v-model:filename="fileName"
-          :accept="['image/svg+xml']"
-          default-text="Click or drop SVG file"
-          @file-selected="handleFileSelected"
-        />
-        <div flex="~ gap-2 items-center">
-          <hr flex-1>
-          <p text-center op-80>
-            OR
-          </p>
-          <hr flex-1>
-        </div>
-      </template>
+      <FileDropZone
+        v-if="!svgCode"
+        v-model:filename="fileName"
+        :accept="['image/svg+xml']"
+        default-text="Click or drop SVG file"
+        @file-selected="handleFileSelected"
+      />
+      <div v-if="!svgCode && !fileName" flex="~ gap-2 items-center">
+        <hr flex-1>
+        <p text-center op-80>
+          OR
+        </p>
+        <hr flex-1>
+      </div>
       <textarea
+        v-if="!fileName"
         v-model="svgCode"
         name="svg-code"
         placeholder="Paste SVG code here"
