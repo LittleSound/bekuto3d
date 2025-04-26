@@ -12,7 +12,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  accept: () => ['image/svg+xml'],
+  accept: () => ['image/svg+xml', 'image/*'],
   multiple: false,
   maxSize: 10 * 1024 * 1024, // 默认 10MB
   defaultText: 'Click or drop file',

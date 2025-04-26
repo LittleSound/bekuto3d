@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import type { ShapeWithColor } from '~/types/three-types'
+import potrace from 'potrace'
 import { Color } from 'three'
 import { useModelSize } from '../composables/useModelSize'
 import { useSvgLoader } from '../composables/useSvgLoader'
@@ -76,6 +77,24 @@ async function loadDefaultSvg() {
   catch (error) {
     console.error('加载默认 SVG 失败:', error)
   }
+}
+
+async function handleImageDrop(files: File[]) {
+  if (files.length === 0) {
+    return
+  }
+
+  const svg = await convertBitmapToSvg(files[0])
+  mountSVG(svg)
+}
+
+function convertBitmapToSvg(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    file.arrayBuffer().then((buffer) => {
+      // eslint-disable-next-line node/prefer-global/buffer
+      potrace.trace(Buffer.from(buffer), (_, svg) => resolve(svg))
+    }).catch(reject)
+  })
 }
 
 function handleFileSelected(files: File[]) {
@@ -255,6 +274,13 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
       <p op-80>
         Convert SVG files to 3D models
       </p>
+    </div>
+    <div>
+      <FileDropZone
+        default-text="Drop image here"
+        :accept="['image/png', 'image/jpeg', 'image/webp']"
+        @file-selected="handleImageDrop"
+      />
     </div>
     <div flex="~ col gap-2">
       <FileDropZone
