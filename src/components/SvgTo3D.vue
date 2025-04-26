@@ -89,10 +89,34 @@ async function handleImageDrop(files: File[]) {
 }
 
 function convertBitmapToSvg(file: File): Promise<string> {
+  // todo: calculate image width and height from file
+  const imageWidth = 193
+  const imageHeight = 193
+  const padding = 8
+  const cornerRadius = 8
+
   return new Promise((resolve, reject) => {
     file.arrayBuffer().then((buffer) => {
       // eslint-disable-next-line node/prefer-global/buffer
-      potrace.trace(Buffer.from(buffer), (_, svg) => resolve(svg))
+      potrace.trace(Buffer.from(buffer), (_, svg) => {
+        // Calculate new SVG size with padding
+        const svgWidth = imageWidth + padding * 2
+        const svgHeight = imageHeight + padding * 2
+
+        // Extract the content between <svg> and </svg>
+        const contentMatch = svg.match(/<svg[^>]*>([\s\S]*)<\/svg>/)
+        const content = contentMatch ? contentMatch[1] : ''
+
+        // Create new SVG with background and content
+        const svgWithBg = `<svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
+  <rect x="0" y="0" width="${svgWidth}" height="${svgHeight}" rx="${cornerRadius}" ry="${cornerRadius}" fill="white"/>
+  <g transform="translate(${padding},${padding})">
+    ${content}
+  </g>
+</svg>`
+
+        resolve(svgWithBg)
+      })
     }).catch(reject)
   })
 }
