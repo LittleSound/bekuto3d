@@ -18,7 +18,6 @@
     "@tresjs/core": "^4.3.3",
     "@vueuse/core": "^12.8.0",
     "fast-xml-parser": "^5.0.9",
-    "jimp": "^1.6.0",
     "jszip": "^3.10.1",
     "potrace": "^2.1.8",
     "three": "^0.174.0",
