@@ -79,6 +79,29 @@ async function loadDefaultSvg() {
   }
 }
 
+function handleFileSelected(files: File[]) {
+  if (files.length === 0)
+    return
+
+  if (isImageFile(files[0])) {
+    handleImageDrop(files)
+    return
+  }
+
+  fileName.value = files[0].name
+
+  const reader = new FileReader()
+  reader.readAsText(files[0])
+  reader.onload = (e) => {
+    const svgData = e.target?.result as string
+    mountSVG(svgData)
+  }
+}
+
+function isImageFile(file: File) {
+  return file.type.startsWith('image/') && !file.type.includes('svg')
+}
+
 async function handleImageDrop(files: File[]) {
   if (files.length === 0) {
     return
@@ -88,26 +111,22 @@ async function handleImageDrop(files: File[]) {
   mountSVG(svg)
 }
 
-function convertBitmapToSvg(file: File): Promise<string> {
-  // todo: calculate image width and height from file
-  const imageWidth = 193
-  const imageHeight = 193
+async function convertBitmapToSvg(file: File) {
+  const { width: imageWidth, height: imageHeight } = await getImageWidthHeight(file)
+
   const padding = 8
   const cornerRadius = 8
 
-  return new Promise((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     file.arrayBuffer().then((buffer) => {
       // eslint-disable-next-line node/prefer-global/buffer
       potrace.trace(Buffer.from(buffer), (_, svg) => {
-        // Calculate new SVG size with padding
         const svgWidth = imageWidth + padding * 2
         const svgHeight = imageHeight + padding * 2
 
-        // Extract the content between <svg> and </svg>
         const contentMatch = svg.match(/<svg[^>]*>([\s\S]*)<\/svg>/)
         const content = contentMatch ? contentMatch[1] : ''
 
-        // Create new SVG with background and content
         const svgWithBg = `<svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
   <rect x="0" y="0" width="${svgWidth}" height="${svgHeight}" rx="${cornerRadius}" ry="${cornerRadius}" fill="white"/>
   <g transform="translate(${padding},${padding})">
@@ -121,17 +140,17 @@ function convertBitmapToSvg(file: File): Promise<string> {
   })
 }
 
-function handleFileSelected(files: File[]) {
-  if (files.length === 0)
-    return
-  fileName.value = files[0].name
-
-  const reader = new FileReader()
-  reader.readAsText(files[0])
-  reader.onload = (e) => {
-    const svgData = e.target?.result as string
-    mountSVG(svgData)
-  }
+function getImageWidthHeight(file: File) {
+  return new Promise<{ width: number, height: number }>((resolve) => {
+    const img = new Image()
+    img.src = URL.createObjectURL(file)
+    img.onload = () => {
+      resolve({
+        width: img.width,
+        height: img.height,
+      })
+    }
+  })
 }
 
 // 组件加载时自动加载默认文件
@@ -299,19 +318,12 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
         Convert SVG files to 3D models
       </p>
     </div>
-    <div>
-      <FileDropZone
-        default-text="Drop image here"
-        :accept="['image/png', 'image/jpeg', 'image/webp']"
-        @file-selected="handleImageDrop"
-      />
-    </div>
     <div flex="~ col gap-2">
       <FileDropZone
         v-if="!svgCode || isLoaded"
         v-model:filename="fileName"
-        :accept="['image/svg+xml']"
-        default-text="Click or drop SVG file"
+        :accept="['image/*']"
+        default-text="Drop SVG or image file"
         @file-selected="handleFileSelected"
       />
       <div v-if="!svgCode && !isLoaded" flex="~ gap-2 items-center">

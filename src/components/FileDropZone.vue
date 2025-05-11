@@ -12,7 +12,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  accept: () => ['image/svg+xml', 'image/*'],
+  accept: () => ['image/svg+xml'],
   multiple: false,
   maxSize: 10 * 1024 * 1024, // 默认 10MB
   defaultText: 'Click or drop file',
@@ -88,7 +88,11 @@ function handleFileSelect(event: Event) {
 function handleFiles(files: File[]) {
   try {
     // 验证文件类型
-    const invalidType = files.find(file => !props.accept.includes(file.type))
+    const invalidType = files.find(file =>
+      !props.accept.some(acceptType =>
+        acceptType === file.type || (acceptType === 'image/*' && file.type.startsWith('image/')),
+      ),
+    )
     if (invalidType)
       throw new Error(`不支持的文件类型: ${invalidType.type}`)
 
