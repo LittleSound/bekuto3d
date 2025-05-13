@@ -107,6 +107,14 @@ async function handleFileSelected(files: File[]) {
 }
 
 async function convertBitmapToSvg(file: File) {
+  /*
+    TODO: There are currently a few issues that we hope can be resolved in the future.
+
+    - Does not support multiple colors
+    - The inner edges of hollow shapes are missing, a phenomenon usually referred to as non-manifold edges, which are structures that cannot be 3D printed.
+    - Cannot remove the added background, the background should be optional.
+  */
+
   const { width: imageWidth, height: imageHeight } = await getImageWidthHeight(file)
 
   const padding = 8
