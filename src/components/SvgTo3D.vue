@@ -79,36 +79,31 @@ async function loadDefaultSvg() {
   }
 }
 
-function handleFileSelected(files: File[]) {
+/**
+ * Load user selected image and convert to 3D model
+ * Supports two types of files:
+ * 1. SVG vector files - directly load and convert to 3D model. Best results.
+ * 2. Bitmap files (jpg/png etc) - first convert bitmap to SVG, then generate 3D model, results have limitations.
+ *
+ * @param files User selected file list
+ */
+async function handleFileSelected(files: File[]) {
   if (files.length === 0)
     return
+  const file = files[0]
 
-  if (isImageFile(files[0])) {
-    handleImageDrop(files)
+  if (!file.type.includes('svg') && file.type.startsWith('image/')) {
+    const svg = await convertBitmapToSvg(file)
+    mountSVG(svg)
     return
   }
 
-  fileName.value = files[0].name
-
   const reader = new FileReader()
-  reader.readAsText(files[0])
+  reader.readAsText(file)
   reader.onload = (e) => {
     const svgData = e.target?.result as string
     mountSVG(svgData)
   }
-}
-
-function isImageFile(file: File) {
-  return file.type.startsWith('image/') && !file.type.includes('svg')
-}
-
-async function handleImageDrop(files: File[]) {
-  if (files.length === 0) {
-    return
-  }
-
-  const svg = await convertBitmapToSvg(files[0])
-  mountSVG(svg)
 }
 
 async function convertBitmapToSvg(file: File) {
@@ -120,7 +115,7 @@ async function convertBitmapToSvg(file: File) {
   return new Promise<string>((resolve, reject) => {
     file.arrayBuffer().then((buffer) => {
       // eslint-disable-next-line node/prefer-global/buffer
-      potrace.trace(Buffer.from(buffer), (_, svg) => {
+      potrace.trace(Buffer.from(buffer), (_: any, svg: string) => {
         const svgWidth = imageWidth + padding * 2
         const svgHeight = imageHeight + padding * 2
 
