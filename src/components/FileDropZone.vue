@@ -43,12 +43,14 @@ const dropZone = ref<HTMLElement>()
 // 处理全局拖拽事件
 useEventListener('dragenter', (e) => {
   e.preventDefault()
+  const dataTransfer = e.dataTransfer
+  if (!dataTransfer?.items.length)
+    return
+  if (!validateFileTypeMimes(Array.from(dataTransfer.items).map(it => (it as DataTransferItem)?.type)))
+    return
   dragEnterCount.value++
   if (dragEnterCount.value === 1)
     isGlobalDragging.value = true
-  const dataTransfer = e.dataTransfer
-  if (!dataTransfer)
-    return
   dataTransfer.dropEffect = 'copy'
 })
 
@@ -69,6 +71,8 @@ useEventListener('dragleave', (e) => {
   dragEnterCount.value--
   if (dragEnterCount.value === 0)
     isGlobalDragging.value = false
+  if (dragEnterCount.value < 0)
+    dragEnterCount.value = 0
 })
 
 // 处理文件拖放
