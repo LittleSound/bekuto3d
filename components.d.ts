@@ -15,10 +15,6 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SvgTo3D: typeof import('./src/components/SvgTo3D.vue')['default']
-    TheCounter: typeof import('./src/components/TheCounter.vue')['default']
     TheFooter: typeof import('./src/components/TheFooter.vue')['default']
-    TheInput: typeof import('./src/components/TheInput.vue')['default']
-    TresDemo: typeof import('./src/components/TresDemo.vue')['default']
-    TresDemo1: typeof import('./src/components/TresDemo1.vue')['default']
   }
 }

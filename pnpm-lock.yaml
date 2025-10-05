@@ -24,6 +24,9 @@ importers:
       fast-xml-parser:
         specifier: ^5.0.9
         version: 5.0.9
+      fix-path-directions:
+        specifier: ^1.0.5
+        version: 1.0.5
       jszip:
         specifier: ^3.10.1
         version: 3.10.1
@@ -2916,6 +2919,9 @@ packages:
     resolution: {integrity: sha512-78/PXT1wlLLDgTzDs7sjq9hzz0vXD+zn+7wypEe4fXQxCmdmqfGsEPQxmiCSQI3ajFV91bVSsvNtrJRiW6nGng==}
     engines: {node: '>=10'}
 
+  fix-path-directions@1.0.5:
+    resolution: {integrity: sha512-WhAx2Gge1YA/IHigI0zqZivwi1Awinm53vRZhzEWiv3aeNQL+AiX8JQ8frEsltPDZ9EeFTtSCzHg3dIMmmazTA==}
+
   flat-cache@4.0.1:
     resolution: {integrity: sha512-f7ccFPK3SXFHpx15UIGyRJ/FJQctuKZ0zVuN3frBo4HnK3cay9VEW0R6yPYFHC0AgqhukPzKjq22t5DmAyqGyw==}
     engines: {node: '>=16'}
@@ -3704,6 +3710,7 @@ packages:
   phin@3.7.1:
     resolution: {integrity: sha512-GEazpTWwTZaEQ9RhL7Nyz0WwqilbqgLahDM3D0hxWwmVDI52nXEybHqiN6/elwpkJBhcuj+WbBu+QfT0uhPGfQ==}
     engines: {node: '>= 8'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -7830,6 +7837,8 @@ snapshots:
     dependencies:
       locate-path: 6.0.0
       path-exists: 4.0.0
+
+  fix-path-directions@1.0.5: {}
 
   flat-cache@4.0.1:
     dependencies:
