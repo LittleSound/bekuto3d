@@ -1,7 +1,7 @@
 {
   "name": "three-3mf-exporter",
   "type": "module",
-  "version": "0.0.4",
+  "version": "45.0.0",
   "description": "3MF Exporter for Three.js",
   "author": "Rizumu Ayaka <rizumu@ayaka.moe>",
   "license": "MIT",
