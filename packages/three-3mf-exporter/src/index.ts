@@ -36,6 +36,7 @@ interface PrintConfig {
   printableArea: [string, string, string, string] // 打印区域坐标
   printerSettingsId: string // 打印机设置ID
   printSettingsId: string // 打印设置ID
+  compression: 'none' | 'standard' // 压缩方式
 }
 
 // 默认的打印配置 (基于 Bambu Lab A1)
@@ -48,7 +49,10 @@ export const defaultPrintConfig: PrintConfig = {
   printableArea: ['0x0', '256x0', '256x256', '0x256'] as const,
   printerSettingsId: 'Bambu Lab A1 0.4 nozzle',
   printSettingsId: '0.20mm Standard @BBL A1',
+  compression: 'standard',
 } as const
+
+const JSZipCompressionMap = { standard: 'DEFLATE' as const, none: 'STORE' as const }
 
 /**
  * 将 Three.js 的 Group 或 Mesh 导出为 3MF 文件格式 (BambuStudio 兼容格式)
@@ -65,6 +69,7 @@ export async function exportTo3MF(
 
   // 合并用户提供的配置与默认配置
   const printConfig = Object.assign({} as (typeof defaultPrintConfig & Partial<PrintConfig>), defaultPrintConfig, printJobConfig)
+  const compression = JSZipCompressionMap[printConfig.compression]
 
   // 收集所有组件和材质信息
   const components: ComponentInfo[] = []
@@ -97,7 +102,7 @@ export async function exportTo3MF(
   zip.file('[Content_Types].xml', contentTypesXML())
 
   // 生成ZIP文件
-  return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml' })
+  return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml', compression })
 }
 
 /**
