@@ -37,6 +37,12 @@ interface PrintConfig {
   printerSettingsId: string // 打印机设置ID
   printSettingsId: string // 打印设置ID
   compression: 'none' | 'standard' // 压缩方式
+
+  metadata: Partial<{
+    Application: string // 应用名称
+    Copyright: string // 版权信息
+    ApplicationTitle: string
+  }> & Record<string, string>
 }
 
 // 默认的打印配置 (基于 Bambu Lab A1)
@@ -50,6 +56,11 @@ export const defaultPrintConfig: PrintConfig = {
   printerSettingsId: 'Bambu Lab A1 0.4 nozzle',
   printSettingsId: '0.20mm Standard @BBL A1',
   compression: 'standard',
+
+  metadata: {
+    Application: 'BambuStudio-02.04.00.70',
+    ApplicationTitle: 'Exported 3D Model',
+  },
 } as const
 
 const JSZipCompressionMap = { standard: 'DEFLATE' as const, none: 'STORE' as const }
@@ -84,7 +95,7 @@ export async function exportTo3MF(
   const transform = calculateCenteringTransform(modelCenter, boundingBox, printConfig)
 
   // 创建 3MF 所需的基本文件结构
-  const mainModelXml = createMainModelXML(objectId, components, transform)
+  const mainModelXml = createMainModelXML(objectId, components, transform, printConfig)
   const objectModelXml = createObjectModelXML(components)
   const modelSettingsXml = createModelSettingsXML(objectId, components)
   const projectSettingsConfig = createProjectSettingsConfig(materials, printConfig)
@@ -281,7 +292,14 @@ function calculateCenteringTransform(modelCenter: ModelCenter, boundingBox: Boun
 /**
  * 创建主3dmodel.model文件的XML数据
  */
-function createMainModelXML(objectId: number, components: ComponentInfo[], transform: string): string {
+function createMainModelXML(objectId: number, components: ComponentInfo[], transform: string, printConfig: PrintConfig): string {
+  const metadata = []
+  const metadataConfig = printConfig.metadata
+  metadata.push({ '@_name': 'CreationDate', '#text': new Date().toString() })
+  for (const key in metadataConfig) {
+    metadata.push({ '@_name': key, '#text': metadataConfig[key] })
+  }
+
   const model = {
     model: {
       '@_unit': 'millimeter',
@@ -290,12 +308,7 @@ function createMainModelXML(objectId: number, components: ComponentInfo[], trans
       '@_xmlns:slic3rpe': 'http://schemas.slic3r.org/3mf/2017/06',
       '@_xmlns:p': 'http://schemas.microsoft.com/3dmanufacturing/production/2015/06',
       '@_requiredextensions': 'p',
-      'metadata': [
-        { '@_name': 'Application', '#text': 'BambuStudio-01.07.04.52' },
-        { '@_name': 'Title', '#text': 'Exported 3D Model' },
-        { '@_name': 'CreationDate', '#text': new Date().toString() },
-        { '@_name': 'Copyright', '#text': 'Copyright (c) 2023. All rights reserved.' },
-      ],
+      metadata,
       'resources': {
         object: {
           '@_id': `${objectId}`,
