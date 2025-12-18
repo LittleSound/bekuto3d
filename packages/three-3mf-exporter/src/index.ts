@@ -1,7 +1,6 @@
 import type { Group, Mesh, MeshPhongMaterial, Object3D } from 'three'
-import { XMLBuilder } from 'fast-xml-parser'
 import JSZip from 'jszip'
-import { Color, Vector3 } from 'three'
+import { Color, Matrix4, Vector3 } from 'three'
 
 /**
  * 组件信息接口 / Component Information Interface
@@ -15,7 +14,7 @@ interface ComponentInfo {
   triangles: { v1: number, v2: number, v3: number }[]
   material: MaterialInfo | null
   // 程序集字段 / Assembly fields
-  subComponents: number[] // 子组件的 ID / IDs of sub-components
+  subComponents: { objectId: number, transform: Matrix4 }[] // 子组件及其变换 / Sub-components and their transforms
   name: string
   uuid: string
 }
@@ -44,11 +43,7 @@ interface PrintConfig {
   printSettingsId: string // 打印设置ID / Print Settings ID
   compression: 'none' | 'standard' // 压缩方式 / Compression Method
 
-  metadata: Partial<{
-    Application: string // 应用名称 / Application Name
-    Copyright: string // 版权信息 / Copyright Information
-    ApplicationTitle: string
-  }> & Record<string, string>
+  metadata: Partial<{ Application: string, Copyright: string, ApplicationTitle: string }>
 }
 
 /**
@@ -112,7 +107,7 @@ export async function exportTo3MF(
     let materialInfo: MaterialInfo | null = null
     if (mesh.material) {
       const color = new Color()
-      // 处理数组材质或单个材质 / Handle array materials or single material
+      // 处理数组材质 or 单个材质 / Handle array materials or single material
       const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
       
       if (mat && 'color' in mat && mat.color) {
@@ -193,111 +188,71 @@ export async function exportTo3MF(
     return componentId
   }
 
-  // 遍历与原生分组 / Traversal & Native Grouping
-  // 将输入对象的直接子级视为顶级构建项 / Treat direct children of the input object as Top Level Build Items
-  const rootChildren = (object.type === 'Scene' || object.type === 'Group') ? object.children : [object]
-  const allVerticesWorld: Vector3[] = []
+  // 辅助函数：处理节点（网格或组） / Helper: Process Node (Mesh or Group)
+  const processNode = (node: Object3D): number => {
+    if (node.type === 'Mesh') {
+      return processMesh(node as Mesh)
+    } else if (node.type === 'Group' || node.type === 'Object3D' || node.type === 'Scene') {
+      const subComponents: { objectId: number, transform: Matrix4 }[] = []
+      node.updateMatrixWorld(true)
 
-  rootChildren.forEach((child) => {
-    let buildObjectId = -1
-
-    if (child.type === 'Mesh') {
-      // 顶级网格 / Top Level Mesh
-      buildObjectId = processMesh(child as Mesh)
-    } else if (child.type === 'Group' || child.type === 'Object3D' || child.type === 'Scene') {
-      // 顶级组 -> 创建程序集 / Top Level Group -> Create Assembly
-      const subComponentIds: number[] = []
-      child.updateMatrixWorld(true)
-
-      child.traverse((sub) => {
-        if (sub.type === 'Mesh') {
-          const subMesh = sub as Mesh
-          // 计算相对于组根节点的变换 / Calculate transform relative to the Group Root
-          const relMatrix = subMesh.matrixWorld.clone().premultiply(child.matrixWorld.clone().invert())
-          
-          // 将此相对变换烘焙到新的“虚拟组件”中 / Bake this relative transform into a new "Virtual Component"
-          // 这为程序集部件创建了唯一的几何定义 / This creates a unique geometry definition for the assembly part
-          const geom = subMesh.geometry
-          const pos = geom.attributes.position
-          const idx = geom.index
-
-          // 材质逻辑 / Material Logic
-          let matInfo: MaterialInfo | null = null
-          if (subMesh.material) {
-             const color = new Color()
-             const m = Array.isArray(subMesh.material) ? subMesh.material[0] : subMesh.material
-             if (m && 'color' in m && m.color) color.copy((m as MeshPhongMaterial).color)
-             else color.set(0x808080)
-             
-             let existing = materials.find(x => x.color.getHex() === color.getHex())
-             if (!existing) {
-                 existing = { id: materials.length + 1, color, name: `mat_${materials.length}`, extruder: materials.length + 1 }
-                 materials.push(existing)
-             }
-             matInfo = existing
-          }
-
-          const cId = components.length + 1
-          const comp: ComponentInfo = {
-              id: cId, type: 'mesh', vertices: [], triangles: [], material: matInfo, name: sub.name, subComponents: [], uuid: generateUUID()
-          }
-
-          const vMap = new Map<string, number>()
-          const getV = (vi: number) => {
-              const v = new Vector3()
-              v.fromBufferAttribute(pos, vi)
-              v.applyMatrix4(relMatrix) // 烘焙相对变换 / Bake Relative Transform
-              const k = `${v.x},${v.y},${v.z}`
-              if (!vMap.has(k)) {
-                  vMap.set(k, comp.vertices.length)
-                  comp.vertices.push({x:v.x, y:v.y, z:v.z})
-              }
-              return vMap.get(k)!
-          }
-
-          if (idx) for(let i=0; i<idx.count; i+=3) comp.triangles.push({v1:getV(idx.getX(i)), v2:getV(idx.getX(i+1)), v3:getV(idx.getX(i+2))})
-          else for(let i=0; i<pos.count; i+=3) comp.triangles.push({v1:getV(i), v2:getV(i+1), v3:getV(i+2)})
-
-          components.push(comp)
-          subComponentIds.push(cId)
+      node.children.forEach((child) => {
+        const subId = processNode(child)
+        if (subId !== -1) {
+          // 计算相对于当前节点的变换 / Calculate transform relative to the current node
+          const relMatrix = child.matrixWorld.clone().premultiply(node.matrixWorld.clone().invert())
+          subComponents.push({ objectId: subId, transform: relMatrix })
         }
       })
 
-      if (subComponentIds.length > 0) {
-          const assemblyId = components.length + 1
-          components.push({
-              id: assemblyId,
-              type: 'assembly',
-              subComponents: subComponentIds,
-              name: child.name || `Group-${assemblyId}`,
-              vertices: [], triangles: [], material: null, uuid: generateUUID()
-          })
-          buildObjectId = assemblyId
+      if (subComponents.length > 0) {
+        const assemblyId = components.length + 1
+        components.push({
+          id: assemblyId,
+          type: 'assembly',
+          subComponents,
+          name: node.name || `Group-${assemblyId}`,
+          vertices: [], triangles: [], material: null, uuid: generateUUID()
+        })
+        return assemblyId
       }
     }
+    return -1
+  }
 
-    if (buildObjectId !== -1) {
-        // 收集用于居中的世界坐标顶点 / Collect World Vertices for Centering
-        child.updateMatrix()
-        const itemMatrix = child.matrix
-        
-        const targetComp = components.find(c => c.id === buildObjectId)!
-        const getVerts = (c: ComponentInfo): {x:number, y:number, z:number}[] => {
-            if (c.type === 'assembly') return c.subComponents.flatMap(sid => getVerts(components.find(x=>x.id===sid)!))
-            return c.vertices
+  // 遍历与原生分组 / Traversal & Native Grouping
+  // 如果输入是场景，将其子项作为顶级构建项。如果是组或网格，作为单个顶级构建项。
+  // If input is Scene, treat children as top-level build items. If Group or Mesh, treat as single top-level.
+  const rootChildren = (object.type === 'Scene') ? object.children : [object]
+  const allVerticesWorld: Vector3[] = []
+
+  rootChildren.forEach((child) => {
+    const childId = processNode(child)
+    if (childId !== -1) {
+      child.updateMatrix()
+      const itemMatrix = child.matrix.clone()
+      
+      const targetComp = components.find(c => c.id === childId)!
+      const getVerts = (c: ComponentInfo): Vector3[] => {
+        if (c.type === 'assembly') {
+          return c.subComponents.flatMap((sc) => {
+            const subComp = components.find(x => x.id === sc.objectId)!
+            return getVerts(subComp).map(v => v.clone().applyMatrix4(sc.transform))
+          })
         }
-        
-        getVerts(targetComp).forEach(v => {
-            const vec = new Vector3(v.x, v.y, v.z)
-            vec.applyMatrix4(itemMatrix)
-            allVerticesWorld.push(vec)
-        })
+        return c.vertices.map(v => new Vector3(v.x, v.y, v.z))
+      }
 
-        buildItems.push({
-            objectId: buildObjectId,
-            transformMatrix: itemMatrix,
-            uuid: generateUUID()
-        })
+      getVerts(targetComp).forEach((vec) => {
+        vec.applyMatrix4(itemMatrix)
+        allVerticesWorld.push(vec)
+      })
+
+      buildItems.push({
+        objectId: childId,
+        transformMatrix: itemMatrix,
+        uuid: generateUUID()
+      })
     }
   })
 
@@ -305,14 +260,14 @@ export async function exportTo3MF(
   let min = { x: Infinity, y: Infinity, z: Infinity }
   let max = { x: -Infinity, y: -Infinity, z: -Infinity }
   if (allVerticesWorld.length > 0) {
-      allVerticesWorld.forEach(v => {
-          min.x = Math.min(min.x, v.x); min.y = Math.min(min.y, v.y); min.z = Math.min(min.z, v.z)
-          max.x = Math.max(max.x, v.x); max.y = Math.max(max.y, v.y); max.z = Math.max(max.z, v.z)
-      })
-  } else { min={x:0,y:0,z:0}; max={x:0,y:0,z:0} }
+    allVerticesWorld.forEach(v => {
+      min.x = Math.min(min.x, v.x); min.y = Math.min(min.y, v.y); min.z = Math.min(min.z, v.z)
+      max.x = Math.max(max.x, v.x); max.y = Math.max(max.y, v.y); max.z = Math.max(max.z, v.z)
+    })
+  } else { min = { x: 0, y: 0, z: 0 }; max = { x: 0, y: 0, z: 0 } }
 
-  const modelCenter = { x: (min.x+max.x)/2, y: (min.y+max.y)/2, z: (min.z+max.z)/2 }
-  const bedCenter = { x: printConfig.printableWidth/2, y: printConfig.printableDepth/2, z: 0 }
+  const modelCenter = { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2, z: (min.z + max.z) / 2 }
+  const bedCenter = { x: printConfig.printableWidth / 2, y: printConfig.printableDepth / 2, z: 0 }
   const shift = { x: bedCenter.x - modelCenter.x, y: bedCenter.y - modelCenter.y, z: bedCenter.z - min.z }
 
   // 生成 XML / Generate XML
@@ -339,7 +294,7 @@ export async function exportTo3MF(
 /**
  * 创建主3dmodel.model文件的XML数据 / Create XML data for the main 3dmodel.model file
  */
-function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[], shift: {x:number, y:number, z:number}, printConfig: PrintConfig): string {
+function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[], shift: { x: number, y: number, z: number }, printConfig: PrintConfig): string {
   const metadata: string[] = []
   const metadataConfig = printConfig.metadata
   metadata.push(`<metadata name="CreationDate">${new Date().toISOString()}</metadata>`)
@@ -349,33 +304,31 @@ function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[]
 
   const resources = components.map((c) => {
     if (c.type === 'assembly') {
-        const comps = c.subComponents.map(sid => `<component objectid="${sid}" />`).join('')
-        return `<object id="${c.id}" type="model" name="${c.name}"><components>${comps}</components></object>`
+      const comps = c.subComponents.map((sc) => {
+        const e = sc.transform.elements
+        const tStr = `${e[0].toFixed(5)} ${e[1].toFixed(5)} ${e[2].toFixed(5)} ${e[4].toFixed(5)} ${e[5].toFixed(5)} ${e[6].toFixed(5)} ${e[8].toFixed(5)} ${e[9].toFixed(5)} ${e[10].toFixed(5)} ${e[12].toFixed(5)} ${e[13].toFixed(5)} ${e[14].toFixed(5)}`
+        return `<component objectid="${sc.objectId}" transform="${tStr}" />`
+      }).join('')
+      return `<object id="${c.id}" type="model" name="${c.name}"><components>${comps}</components></object>`
     } else {
-        const vXml = c.vertices.map(v => `<vertex x="${v.x.toFixed(5)}" y="${v.y.toFixed(5)}" z="${v.z.toFixed(5)}" />`).join(' ')
-        const tXml = c.triangles.map(t => `<triangle v1="${t.v1}" v2="${t.v2}" v3="${t.v3}" />`).join(' ')
-        return `<object id="${c.id}" type="model" name="${c.name}"><mesh><vertices>${vXml}</vertices><triangles>${tXml}</triangles></mesh></object>`
+      const vXml = c.vertices.map(v => `<vertex x="${v.x.toFixed(5)}" y="${v.y.toFixed(5)}" z="${v.z.toFixed(5)}" />`).join(' ')
+      const tXml = c.triangles.map(t => `<triangle v1="${t.v1}" v2="${t.v2}" v3="${t.v3}" />`).join(' ')
+      return `<object id="${c.id}" type="model" name="${c.name}"><mesh><vertices>${vXml}</vertices><triangles>${tXml}</triangles></mesh></object>`
     }
   }).join('\n')
 
   const build = buildItems.map((item) => {
-      // 对平移元素应用位移 (12, 13, 14) / Apply shift to translation elements (12, 13, 14)
-      // ThreeJS Matrix4 元素是列主序的 / ThreeJS Matrix4 elements are column-major.
-      // 0 4 8 12 (x)
-      // 1 5 9 13 (y)
-      // 2 6 10 14 (z)
-      // 3 7 11 15
-      const e = item.transformMatrix.elements
-      const tx = e[12] + shift.x
-      const ty = e[13] + shift.y
-      const tz = e[14] + shift.z
-      // 3MF 变换：m00 m01 m02 m10 m11 m12 m20 m21 m22 m30 m31 m32 (仿射 3x4)
-      // 3MF Transform: m00 m01 m02 m10 m11 m12 m20 m21 m22 m30 m31 m32 (affine 3x4)
-      const tStr = `${e[0].toFixed(5)} ${e[1].toFixed(5)} ${e[2].toFixed(5)} ${e[4].toFixed(5)} ${e[5].toFixed(5)} ${e[6].toFixed(5)} ${e[8].toFixed(5)} ${e[9].toFixed(5)} ${e[10].toFixed(5)} ${tx.toFixed(5)} ${ty.toFixed(5)} ${tz.toFixed(5)}`
-      return `<item objectid="${item.objectId}" transform="${tStr}" printable="1" />`
+    // 对平移元素应用位移 (12, 13, 14) / Apply shift to translation elements (12, 13, 14)
+    const e = item.transformMatrix.elements
+    const tx = e[12] + shift.x
+    const ty = e[13] + shift.y
+    const tz = e[14] + shift.z
+    // 3MF 变换：m00 m01 m02 m10 m11 m12 m20 m21 m22 m30 m31 m32 (仿射 3x4)
+    // 3MF Transform: m00 m01 m02 m10 m11 m12 m20 m21 m22 m30 m31 m32 (affine 3x4)
+    const tStr = `${e[0].toFixed(5)} ${e[1].toFixed(5)} ${e[2].toFixed(5)} ${e[4].toFixed(5)} ${e[5].toFixed(5)} ${e[6].toFixed(5)} ${e[8].toFixed(5)} ${e[9].toFixed(5)} ${e[10].toFixed(5)} ${tx.toFixed(5)} ${ty.toFixed(5)} ${tz.toFixed(5)}`
+    return `<item objectid="${item.objectId}" transform="${tStr}" printable="1" />`
   }).join('\n')
 
-  // 手动构建根节点以便轻松处理命名空间 / Manually construct the root to handle namespaces easily
   return `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" requiredextensions="p">
     ${metadata.join('\n    ')}
@@ -392,48 +345,49 @@ ${build}
  * 创建模型设置XML配置 / Create XML configuration for model settings
  */
 function createModelSettingsXML(components: ComponentInfo[], buildItems: BuildItem[]): string {
-    let objectsXml = ""
-    let instancesXml = ""
-    let assembleXml = ""
+  let objectsXml = ""
+  let instancesXml = ""
+  let assembleXml = ""
 
-    buildItems.forEach((item, index) => {
-        const objId = item.objectId
-        const comp = components.find(c => c.id === objId)!
-        
-        // 展平此对象的部件 / Flatten parts for this object
-        const parts: ComponentInfo[] = []
-        const collect = (c: ComponentInfo) => {
-            if (c.type === 'mesh') parts.push(c)
-            else c.subComponents.forEach(sid => collect(components.find(x => x.id === sid)!))
-        }
-        collect(comp)
-        
-        const partsXml = parts.map(p => {
-             const extruder = p.material ? p.material.extruder : 1
-             return `    <part id="${p.id}" subtype="normal_part">
+  buildItems.forEach((item, index) => {
+    const objId = item.objectId
+    const comp = components.find(c => c.id === objId)!
+
+    // 展平此对象的部件 / Flatten parts for this object
+    const parts: ComponentInfo[] = []
+    const collect = (c: ComponentInfo) => {
+      if (c.type === 'mesh')
+        parts.push(c)
+      else c.subComponents.forEach(sc => collect(components.find(x => x.id === sc.objectId)!))
+    }
+    collect(comp)
+
+    const partsXml = parts.map(p => {
+      const extruder = p.material ? p.material.extruder : 1
+      return `    <part id="${p.id}" subtype="normal_part">
       <metadata key="name" value="${p.name}"/>
       <metadata key="extruder" value="${extruder}"/>
       <mesh_stat edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/>
     </part>`
-        }).join('\n')
+    }).join('\n')
 
-        objectsXml += `  <object id="${objId}">
+    objectsXml += `  <object id="${objId}">
     <metadata key="name" value="${comp.name}"/>
     <metadata key="extruder" value="1"/>
     <metadata key="thumbnail_file" value=""/>
 ${partsXml}
   </object>\n`
 
-        instancesXml += `    <model_instance>
+    instancesXml += `    <model_instance>
       <metadata key="object_id" value="${objId}"/>
       <metadata key="instance_id" value="0"/>
       <metadata key="identify_id" value="${index + 1}"/>
     </model_instance>\n`
-        
-        assembleXml += `    <assemble_item object_id="${objId}" instance_id="0" offset="0 0 0"/>\n`
-    })
 
-    return `<?xml version="1.0" encoding="UTF-8"?>
+    assembleXml += `    <assemble_item object_id="${objId}" instance_id="0" offset="0 0 0"/>\n`
+  })
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <config>
 ${objectsXml}
   <plate>
