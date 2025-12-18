@@ -86,4 +86,71 @@ describe('three-3mf-exporter', () => {
     expect(modelXml).toContain('<item objectid="2"')
     expect(modelXml).toContain('<item objectid="4"')
   })
+
+  it('should export a Scene with a single mesh as a single top-level object', async () => {
+    const scene = new THREE.Scene()
+    const mesh = new Mesh(new BoxGeometry(1, 1, 1))
+    mesh.name = 'SceneMesh'
+    scene.add(mesh)
+
+    const blob = await exportTo3MF(scene)
+    const zip = await getZip(blob)
+    const modelXml = await zip.file('3D/3dmodel.model')!.async('string')
+
+    expect(modelXml).toContain('<object id="1" type="model" name="SceneMesh">')
+    expect(modelXml).toContain('<item objectid="1"')
+  })
+
+  it('should export a Scene with a single group as a single top-level assembly', async () => {
+    const scene = new THREE.Scene()
+    const group = new THREE.Group()
+    group.name = 'SceneGroup'
+    group.add(new Mesh(new BoxGeometry(1, 1, 1)))
+    scene.add(group)
+
+    const blob = await exportTo3MF(scene)
+    const zip = await getZip(blob)
+    const modelXml = await zip.file('3D/3dmodel.model')!.async('string')
+
+    // Mesh -> 1, Group -> 2
+    expect(modelXml).toContain('<object id="2" type="model" name="SceneGroup">')
+    expect(modelXml).toContain('<item objectid="2"')
+  })
+
+  it('should export a Scene with mixed content correctly (multiple meshes and groups)', async () => {
+    const scene = new THREE.Scene()
+    
+    // 1. A single mesh
+    const soloMesh = new Mesh(new BoxGeometry(1, 1, 1))
+    soloMesh.name = 'SoloMesh'
+    scene.add(soloMesh)
+    
+    // 2. A group
+    const group = new THREE.Group()
+    group.name = 'GroupObj'
+    group.add(new Mesh(new BoxGeometry(1, 1, 1)))
+    group.add(new Mesh(new BoxGeometry(1, 1, 1)))
+    scene.add(group)
+    
+    // 3. Another mesh
+    const secondSoloMesh = new Mesh(new BoxGeometry(1, 1, 1))
+    secondSoloMesh.name = 'SecondSolo'
+    scene.add(secondSoloMesh)
+
+    const blob = await exportTo3MF(scene)
+    const zip = await getZip(blob)
+    const modelXml = await zip.file('3D/3dmodel.model')!.async('string')
+
+    // SoloMesh -> 1
+    // GroupMesh1 -> 2, GroupMesh2 -> 3, GroupObj -> 4
+    // SecondSolo -> 5
+    
+    expect(modelXml).toContain('<object id="1" type="model" name="SoloMesh">')
+    expect(modelXml).toContain('<object id="4" type="model" name="GroupObj">')
+    expect(modelXml).toContain('<object id="5" type="model" name="SecondSolo">')
+    
+    expect(modelXml).toContain('<item objectid="1"')
+    expect(modelXml).toContain('<item objectid="4"')
+    expect(modelXml).toContain('<item objectid="5"')
+  })
 })
