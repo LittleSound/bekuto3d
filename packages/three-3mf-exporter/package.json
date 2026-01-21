@@ -45,7 +45,8 @@
   ],
   "scripts": {
     "build": "unbuild",
-    "stub": "unbuild --stub"
+    "stub": "unbuild --stub",
+    "test": "vitest run"
   },
   "peerDependencies": {
     "three": "*"
