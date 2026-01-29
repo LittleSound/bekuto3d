@@ -18,9 +18,11 @@ const curveSegments = ref(64) // 模型曲线部分的细分程度
 const fileName = ref('')
 const svgShapes = ref<ShapeWithColor[]>([])
 const modelRendererRef = ref<InstanceType<typeof ModelRenderer>>()
-const selectedShapeIndex = ref<number | null>(null)
+const selectedShapeIndices = ref<Set<number>>(new Set())
+const hoverShapeIndex = ref<number | null>(null)
 const editingInputIndex = ref<number | null>(null)
 const isExporting = ref<boolean>(false)
+const lastSelectedIndex = ref<number | null>(null) // 用于 Shift 范围选择
 
 // 使用 useModelSize composable
 const {
@@ -166,13 +168,6 @@ watchModelSizeChanges(modelGroup, svgShapes)
 
 const cameraPosition = ref<[number, number, number]>([-50, 50, 100])
 
-function formatSelectedShapeIndex(index: number | null) {
-  if (index === null)
-    return null
-  const newIndex = toShownIndex(index)
-  return newIndex === -1 ? null : newIndex
-}
-
 function toShownIndex(index: number) {
   return shownShapes.value.findIndex(s => s === svgShapes.value[index])
 }
@@ -181,33 +176,140 @@ function toSvgIndex(index: number) {
   return svgShapes.value.findIndex(s => s === shownShapes.value[index])
 }
 
-const selectedShownShapeIndex = computed({
+// 将 svgShapes 索引集合转换为 shownShapes 索引集合
+function toShownIndices(indices: Set<number>): Set<number> {
+  const result = new Set<number>()
+  for (const index of indices) {
+    const shownIndex = toShownIndex(index)
+    if (shownIndex !== -1) {
+      result.add(shownIndex)
+    }
+  }
+  return result
+}
+
+// 将 shownShapes 索引集合转换为 svgShapes 索引集合
+function toSvgIndices(indices: Set<number>): Set<number> {
+  const result = new Set<number>()
+  for (const index of indices) {
+    const svgIndex = toSvgIndex(index)
+    if (svgIndex !== -1) {
+      result.add(svgIndex)
+    }
+  }
+  return result
+}
+
+// 用于 ModelRenderer 的双向绑定
+const selectedShownShapeIndices = computed({
   get: () => {
     if (isExporting.value)
-      return null
-    if (editingInputIndex.value !== null)
-      return formatSelectedShapeIndex(editingInputIndex.value)
-    return formatSelectedShapeIndex(selectedShapeIndex.value)
+      return new Set<number>()
+    return toShownIndices(selectedShapeIndices.value)
   },
-  set: (index: number) => {
+  set: (indices: Set<number>) => {
     if (isDefaultSvg.value || isExporting.value)
-      return false
-    const newIndex = toSvgIndex(index)
-    selectedShapeIndex.value = newIndex
+      return
+    selectedShapeIndices.value = toSvgIndices(indices)
   },
 })
 
-function handleMeshClick(index: number) {
+// hover 索引转换
+const hoverShownShapeIndex = computed({
+  get: () => {
+    if (isExporting.value || hoverShapeIndex.value === null)
+      return null
+    if (editingInputIndex.value !== null) {
+      const shownIndex = toShownIndex(editingInputIndex.value)
+      return shownIndex === -1 ? null : shownIndex
+    }
+    const shownIndex = toShownIndex(hoverShapeIndex.value)
+    return shownIndex === -1 ? null : shownIndex
+  },
+  set: (index: number | null) => {
+    if (isDefaultSvg.value || isExporting.value)
+      return
+    hoverShapeIndex.value = index === null ? null : toSvgIndex(index)
+  },
+})
+
+// 选择操作函数
+function toggleSelection(index: number, event?: MouseEvent | PointerEvent) {
+  if (isDefaultSvg.value || isExporting.value)
+    return
+
+  const isCtrlOrCmd = event?.ctrlKey || event?.metaKey
+  const isShift = event?.shiftKey
+
+  if (isShift && lastSelectedIndex.value !== null) {
+    // Shift + 点击：范围选择
+    const start = Math.min(lastSelectedIndex.value, index)
+    const end = Math.max(lastSelectedIndex.value, index)
+    if (!isCtrlOrCmd) {
+      selectedShapeIndices.value = new Set()
+    }
+    for (let i = start; i <= end; i++) {
+      selectedShapeIndices.value.add(i)
+    }
+    // 触发响应式更新
+    selectedShapeIndices.value = new Set(selectedShapeIndices.value)
+  }
+  else if (isCtrlOrCmd) {
+    // Ctrl/Cmd + 点击：切换单个选择
+    const newSet = new Set(selectedShapeIndices.value)
+    if (newSet.has(index)) {
+      newSet.delete(index)
+    }
+    else {
+      newSet.add(index)
+    }
+    selectedShapeIndices.value = newSet
+    lastSelectedIndex.value = index
+  }
+  else {
+    // 普通点击：单选
+    selectedShapeIndices.value = new Set([index])
+    lastSelectedIndex.value = index
+  }
+}
+
+// 全选
+function selectAll() {
+  if (isDefaultSvg.value || isExporting.value)
+    return
+  selectedShapeIndices.value = new Set(svgShapes.value.map((_, i) => i))
+}
+
+// 取消全选
+function clearSelection() {
+  selectedShapeIndices.value = new Set()
+  lastSelectedIndex.value = null
+}
+
+// 检查是否全选
+const isAllSelected = computed(() => {
+  return svgShapes.value.length > 0 && selectedShapeIndices.value.size === svgShapes.value.length
+})
+
+// 检查是否有选中项
+const hasSelection = computed(() => selectedShapeIndices.value.size > 0)
+
+function handleMeshClick(index: number, event: PointerEvent) {
   if (isDefaultSvg.value || isExporting.value)
     return
 
   const svgIndex = toSvgIndex(index)
-  nextTick(() => {
-    const targetInput = inputRefs.value[svgIndex]
-    if (targetInput) {
-      targetInput.focus()
-    }
-  })
+  toggleSelection(svgIndex, event)
+
+  // 如果不是多选模式，聚焦到对应的输入框
+  if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
+    nextTick(() => {
+      const targetInput = inputRefs.value[svgIndex]
+      if (targetInput) {
+        targetInput.focus()
+      }
+    })
+  }
 }
 
 function handleColorChange(index: number, color: string) {
@@ -268,7 +370,7 @@ function handleClose() {
   fileName.value = ''
   svgShapes.value = []
   svgCode.value = ''
-  selectedShapeIndex.value = null
+  clearSelection()
   editingInputIndex.value = null
   isExporting.value = false
   size.value = defaultSize
@@ -284,7 +386,8 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
     v-model:model-size="modelSize"
     v-model:model-offset="modelOffset"
     v-model:camera-position="cameraPosition"
-    v-model:selected-shape-index="selectedShownShapeIndex"
+    v-model:selected-shape-indices="selectedShownShapeIndices"
+    v-model:hover-shape-index="hoverShownShapeIndex"
     :shapes="shownShapes"
     :z-fighting="!isExporting"
     :scale="scale"
@@ -372,20 +475,46 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
         <div flex-1 />
         <div>unit: <span text-blue>mm</span></div>
       </div>
+      <!-- 多选工具栏 -->
+      <div flex="~ gap-2 items-center justify-between" text-sm>
+        <div flex="~ gap-2 items-center">
+          <button
+            class="px-2 py-1 rounded bg-black/10 transition-colors dark:bg-white/20 hover:bg-black/20 dark:hover:bg-white/30"
+            :title="isAllSelected ? 'Deselect all' : 'Select all'"
+            @click="isAllSelected ? clearSelection() : selectAll()"
+          >
+            {{ isAllSelected ? 'Deselect all' : 'Select all' }}
+          </button>
+          <button
+            v-if="hasSelection"
+            class="px-2 py-1 rounded bg-black/10 transition-colors dark:bg-white/20 hover:bg-black/20 dark:hover:bg-white/30"
+            title="Clear selection"
+            @click="clearSelection()"
+          >
+            Clear
+          </button>
+        </div>
+        <div v-if="hasSelection" op-70>
+          {{ selectedShapeIndices.size }} / {{ svgShapes.length }} selected
+        </div>
+      </div>
       <div flex="~ col">
         <div
           v-for="(item, index) in svgShapes"
           :key="index"
           flex="~ gap-4"
-          class="px-2 border rounded transition-colors duration-200"
+          class="px-2 border rounded cursor-pointer transition-colors duration-200"
           :class="[
-            (editingInputIndex !== null ? editingInputIndex === index : selectedShapeIndex === index)
+            selectedShapeIndices.has(index) || editingInputIndex === index
               ? 'dark:border-white border-black'
-              : 'border-transparent hover:border-gray-500/50',
+              : hoverShapeIndex === index
+                ? 'border-gray-500/50'
+                : 'border-transparent hover:border-gray-500/50',
             item.depth === 0 ? 'op-50' : '',
           ]"
-          @mouseenter="selectedShapeIndex = index"
-          @mouseleave="selectedShapeIndex = null"
+          @mouseenter="hoverShapeIndex = index"
+          @mouseleave="hoverShapeIndex = null"
+          @click="toggleSelection(index, $event)"
         >
           <div flex="~ gap-2 items-center py-3" relative :title="`Shape ${index + 1}`">
             <label

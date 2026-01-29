@@ -46,10 +46,14 @@ const emit = defineEmits<{
   (e: 'update:modelSize', size: ModelSize): void
   (e: 'update:modelOffset', offset: ModelOffset): void
   (e: 'modelLoaded'): void
-  (e: 'meshClick', index: number): void
+  (e: 'meshClick', index: number, event: PointerEvent): void
 }>()
 
-const selectedShapeIndex = defineModel<number | null>('selectedShapeIndex', {
+const selectedShapeIndices = defineModel<Set<number>>('selectedShapeIndices', {
+  default: () => new Set<number>(),
+})
+
+const hoverShapeIndex = defineModel<number | null>('hoverShapeIndex', {
   default: null,
 })
 
@@ -115,8 +119,9 @@ const shownShapes = computed(() => props.zFighting ? suppressZFighting(props.sha
 
 // 获取形状的材质配置
 function getShapeMaterialConfig(index: number) {
-  const hasSelected = selectedShapeIndex.value !== null
-  const isSelected = index === selectedShapeIndex.value
+  const hasSelected = selectedShapeIndices.value.size > 0 || hoverShapeIndex.value !== null
+  const isSelected = selectedShapeIndices.value.has(index)
+  const isHovered = index === hoverShapeIndex.value
   const baseConfig = {
     shininess: props.materialConfig.shininess,
     transparent: props.materialConfig.transparent,
@@ -125,11 +130,10 @@ function getShapeMaterialConfig(index: number) {
   }
 
   if (hasSelected) {
-    if (isSelected) {
+    if (isSelected || isHovered) {
       return {
         ...baseConfig,
         opacity: 1,
-        // depthTest: true,
         depthWrite: true,
       }
     }
@@ -137,7 +141,6 @@ function getShapeMaterialConfig(index: number) {
       return {
         ...baseConfig,
         opacity: 0.2,
-        // depthTest: true,
         depthWrite: false,
       }
     }
@@ -185,17 +188,17 @@ function calculateModelSize() {
 }
 
 function addHoverModel(index: number, event: PointerEvent) {
-  selectedShapeIndex.value = index
+  hoverShapeIndex.value = index
   event.stopPropagation()
 }
 
 function removeHoverModel(_: number, event: PointerEvent) {
-  selectedShapeIndex.value = null
+  hoverShapeIndex.value = null
   event.stopPropagation()
 }
 
 function handleMeshClick(index: number, event: PointerEvent) {
-  emit('meshClick', index)
+  emit('meshClick', index, event)
   event.stopPropagation()
 }
 
