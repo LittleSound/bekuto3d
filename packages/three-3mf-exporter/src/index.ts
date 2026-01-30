@@ -1,6 +1,6 @@
-import type { Group, Mesh, MeshPhongMaterial, Object3D } from 'three'
+import type { Group, Matrix4, Mesh, MeshPhongMaterial, Object3D } from 'three'
 import JSZip from 'jszip'
-import { Color, Matrix4, Vector3 } from 'three'
+import { Color, Vector3 } from 'three'
 
 /**
  * 组件信息接口 / Component Information Interface
@@ -109,10 +109,11 @@ export async function exportTo3MF(
       const color = new Color()
       // 处理数组材质 or 单个材质 / Handle array materials or single material
       const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
-      
+
       if (mat && 'color' in mat && mat.color) {
         color.copy((mat as MeshPhongMaterial).color)
-      } else {
+      }
+      else {
         // 默认颜色为灰色 / Default color is gray
         color.set(0x808080)
       }
@@ -124,7 +125,8 @@ export async function exportTo3MF(
 
       if (existingMaterial) {
         materialInfo = existingMaterial
-      } else {
+      }
+      else {
         const extruder = materials.length + 1 // 挤出头编号从1开始 / Extruder numbering starts from 1
         materialInfo = {
           id: materials.length + 1,
@@ -145,12 +147,12 @@ export async function exportTo3MF(
       material: materialInfo,
       name: mesh.name || `Mesh-${componentId}`,
       subComponents: [],
-      uuid: generateUUID()
+      uuid: generateUUID(),
     }
 
     // 顶点去重映射表 / Vertex De-duplication Map
     const vertexMap = new Map<string, number>()
-    
+
     // 在局部空间（几何空间）处理顶点 / Process Vertices in LOCAL space (Geometry space)
     const processVertex = (vertexIndex: number) => {
       const vertex = new Vector3()
@@ -174,7 +176,8 @@ export async function exportTo3MF(
           v3: processVertex(indexAttr.getX(i + 2)),
         })
       }
-    } else {
+    }
+    else {
       for (let i = 0; i < positionAttr.count; i += 3) {
         component.triangles.push({
           v1: processVertex(i),
@@ -192,7 +195,8 @@ export async function exportTo3MF(
   const processNode = (node: Object3D): number => {
     if (node.type === 'Mesh') {
       return processMesh(node as Mesh)
-    } else if (node.type === 'Group' || node.type === 'Object3D' || node.type === 'Scene') {
+    }
+    else if (node.type === 'Group' || node.type === 'Object3D' || node.type === 'Scene') {
       const subComponents: { objectId: number, transform: Matrix4 }[] = []
       node.updateMatrixWorld(true)
 
@@ -212,7 +216,10 @@ export async function exportTo3MF(
           type: 'assembly',
           subComponents,
           name: node.name || `Group-${assemblyId}`,
-          vertices: [], triangles: [], material: null, uuid: generateUUID()
+          vertices: [],
+          triangles: [],
+          material: null,
+          uuid: generateUUID(),
         })
         return assemblyId
       }
@@ -231,7 +238,7 @@ export async function exportTo3MF(
     if (childId !== -1) {
       child.updateMatrix()
       const itemMatrix = child.matrix.clone()
-      
+
       const targetComp = components.find(c => c.id === childId)!
       const getVerts = (c: ComponentInfo): Vector3[] => {
         if (c.type === 'assembly') {
@@ -251,7 +258,7 @@ export async function exportTo3MF(
       buildItems.push({
         objectId: childId,
         transformMatrix: itemMatrix,
-        uuid: generateUUID()
+        uuid: generateUUID(),
       })
     }
   })
@@ -260,11 +267,19 @@ export async function exportTo3MF(
   let min = { x: Infinity, y: Infinity, z: Infinity }
   let max = { x: -Infinity, y: -Infinity, z: -Infinity }
   if (allVerticesWorld.length > 0) {
-    allVerticesWorld.forEach(v => {
-      min.x = Math.min(min.x, v.x); min.y = Math.min(min.y, v.y); min.z = Math.min(min.z, v.z)
-      max.x = Math.max(max.x, v.x); max.y = Math.max(max.y, v.y); max.z = Math.max(max.z, v.z)
+    allVerticesWorld.forEach((v) => {
+      min.x = Math.min(min.x, v.x)
+      min.y = Math.min(min.y, v.y)
+      min.z = Math.min(min.z, v.z)
+      max.x = Math.max(max.x, v.x)
+      max.y = Math.max(max.y, v.y)
+      max.z = Math.max(max.z, v.z)
     })
-  } else { min = { x: 0, y: 0, z: 0 }; max = { x: 0, y: 0, z: 0 } }
+  }
+  else {
+    min = { x: 0, y: 0, z: 0 }
+    max = { x: 0, y: 0, z: 0 }
+  }
 
   const modelCenter = { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2, z: (min.z + max.z) / 2 }
   const bedCenter = { x: printConfig.printableWidth / 2, y: printConfig.printableDepth / 2, z: 0 }
@@ -299,7 +314,7 @@ function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[]
   const metadataConfig = printConfig.metadata
   metadata.push(`<metadata name="CreationDate">${new Date().toISOString()}</metadata>`)
   for (const key in metadataConfig) {
-    metadata.push(`<metadata name="${key}">${metadataConfig[key]}</metadata>`)
+    metadata.push(`<metadata name="${key}">${(metadataConfig as Record<string, unknown>)[key]}</metadata>`)
   }
 
   const resources = components.map((c) => {
@@ -310,7 +325,8 @@ function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[]
         return `<component objectid="${sc.objectId}" transform="${tStr}" />`
       }).join('')
       return `<object id="${c.id}" type="model" name="${c.name}"><components>${comps}</components></object>`
-    } else {
+    }
+    else {
       const vXml = c.vertices.map(v => `<vertex x="${v.x.toFixed(5)}" y="${v.y.toFixed(5)}" z="${v.z.toFixed(5)}" />`).join(' ')
       const tXml = c.triangles.map(t => `<triangle v1="${t.v1}" v2="${t.v2}" v3="${t.v3}" />`).join(' ')
       return `<object id="${c.id}" type="model" name="${c.name}"><mesh><vertices>${vXml}</vertices><triangles>${tXml}</triangles></mesh></object>`
@@ -345,9 +361,9 @@ ${build}
  * 创建模型设置XML配置 / Create XML configuration for model settings
  */
 function createModelSettingsXML(components: ComponentInfo[], buildItems: BuildItem[]): string {
-  let objectsXml = ""
-  let instancesXml = ""
-  let assembleXml = ""
+  let objectsXml = ''
+  let instancesXml = ''
+  let assembleXml = ''
 
   buildItems.forEach((item, index) => {
     const objId = item.objectId
@@ -362,7 +378,7 @@ function createModelSettingsXML(components: ComponentInfo[], buildItems: BuildIt
     }
     collect(comp)
 
-    const partsXml = parts.map(p => {
+    const partsXml = parts.map((p) => {
       const extruder = p.material ? p.material.extruder : 1
       return `    <part id="${p.id}" subtype="normal_part">
       <metadata key="name" value="${p.name}"/>

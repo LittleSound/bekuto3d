@@ -60,7 +60,7 @@ defineExpose({
 </script>
 
 <template>
-  <label class="inline-flex gap-2 items-center" :class="[props.class]" :title="title">
+  <div class="inline-flex gap-2 items-center" :class="[props.class]" :title="title" @click="focus()">
     <span class="h-[1.2em] min-h-[1.2em] min-w-[1.2em] w-[1.2em]" :class="[icon]" inline-block />
     <input
       ref="inputRef"
@@ -75,5 +75,5 @@ defineExpose({
       @focus="handleFocus"
       @blur="handleBlur"
     >
-  </label>
+  </div>
 </template>

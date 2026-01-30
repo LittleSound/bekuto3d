@@ -18,9 +18,11 @@ const curveSegments = ref(64) // 模型曲线部分的细分程度
 const fileName = ref('')
 const svgShapes = ref<ShapeWithColor[]>([])
 const modelRendererRef = ref<InstanceType<typeof ModelRenderer>>()
-const selectedShapeIndex = ref<number | null>(null)
+const selectedShapeIndices = ref<Set<number>>(new Set())
+const hoverShapeIndex = ref<number | null>(null)
 const editingInputIndex = ref<number | null>(null)
 const isExporting = ref<boolean>(false)
+const lastSelectedIndex = ref<number | null>(null) // 用于 Shift 范围选择
 
 // 使用 useModelSize composable
 const {
@@ -166,13 +168,6 @@ watchModelSizeChanges(modelGroup, svgShapes)
 
 const cameraPosition = ref<[number, number, number]>([-50, 50, 100])
 
-function formatSelectedShapeIndex(index: number | null) {
-  if (index === null)
-    return null
-  const newIndex = toShownIndex(index)
-  return newIndex === -1 ? null : newIndex
-}
-
 function toShownIndex(index: number) {
   return shownShapes.value.findIndex(s => s === svgShapes.value[index])
 }
@@ -181,37 +176,201 @@ function toSvgIndex(index: number) {
   return svgShapes.value.findIndex(s => s === shownShapes.value[index])
 }
 
-const selectedShownShapeIndex = computed({
+/** Converts a Set of indices using a mapping function, filtering out invalid (-1) results */
+function mapIndices(indices: Set<number>, mapper: (index: number) => number): Set<number> {
+  const result = new Set<number>()
+  for (const index of indices) {
+    const mapped = mapper(index)
+    if (mapped !== -1) {
+      result.add(mapped)
+    }
+  }
+  return result
+}
+
+/** Computed property for ModelRenderer binding - converts between svgShapes and shownShapes indices */
+const selectedShownShapeIndices = computed({
   get: () => {
     if (isExporting.value)
-      return null
-    if (editingInputIndex.value !== null)
-      return formatSelectedShapeIndex(editingInputIndex.value)
-    return formatSelectedShapeIndex(selectedShapeIndex.value)
+      return new Set<number>()
+    return mapIndices(selectedShapeIndices.value, toShownIndex)
   },
-  set: (index: number) => {
+  set: (indices: Set<number>) => {
     if (isDefaultSvg.value || isExporting.value)
-      return false
-    const newIndex = toSvgIndex(index)
-    selectedShapeIndex.value = newIndex
+      return
+    selectedShapeIndices.value = mapIndices(indices, toSvgIndex)
   },
 })
 
-function handleMeshClick(index: number) {
+/** Computed property for hover state - prioritizes editingInputIndex over hoverShapeIndex */
+const hoverShownShapeIndex = computed({
+  get: () => {
+    if (isExporting.value)
+      return null
+    const sourceIndex = editingInputIndex.value ?? hoverShapeIndex.value
+    if (sourceIndex === null)
+      return null
+    const shownIndex = toShownIndex(sourceIndex)
+    return shownIndex === -1 ? null : shownIndex
+  },
+  set: (index: number | null) => {
+    if (isDefaultSvg.value || isExporting.value)
+      return
+    hoverShapeIndex.value = index === null ? null : toSvgIndex(index)
+  },
+})
+
+/**
+ * Handles selection logic with support for Ctrl/Cmd (toggle) and Shift (range) modifiers.
+ * - Normal click: single select
+ * - Ctrl/Cmd + click: toggle selection
+ * - Shift + click: range select from lastSelectedIndex
+ */
+function toggleSelection(index: number, event?: MouseEvent | PointerEvent) {
   if (isDefaultSvg.value || isExporting.value)
     return
 
-  const svgIndex = toSvgIndex(index)
+  const isCtrlOrCmd = event?.ctrlKey || event?.metaKey
+  const isShift = event?.shiftKey
+
+  if (isShift && lastSelectedIndex.value !== null) {
+    const start = Math.min(lastSelectedIndex.value, index)
+    const end = Math.max(lastSelectedIndex.value, index)
+    const rangeSet = isCtrlOrCmd ? new Set(selectedShapeIndices.value) : new Set<number>()
+    for (let i = start; i <= end; i++) {
+      rangeSet.add(i)
+    }
+    selectedShapeIndices.value = rangeSet
+    lastSelectedIndex.value = index
+  }
+  else if (isCtrlOrCmd) {
+    const newSet = new Set(selectedShapeIndices.value)
+    newSet.has(index) ? newSet.delete(index) : newSet.add(index)
+    selectedShapeIndices.value = newSet
+    lastSelectedIndex.value = index
+  }
+  else {
+    selectedShapeIndices.value = new Set([index])
+    lastSelectedIndex.value = index
+  }
+}
+
+/** Selects the item and focuses its input. Used when clicking list items or canvas models. */
+function selectAndFocus(index: number, event?: MouseEvent | PointerEvent) {
+  toggleSelection(index, event)
+  focusToInput(index)
+}
+
+/** Clears all selections */
+function clearSelection() {
+  selectedShapeIndices.value = new Set()
+  lastSelectedIndex.value = null
+}
+
+/**
+ * Focuses the input of the appropriate selected item.
+ * Prioritizes the clicked item if selected, otherwise focuses the first selected item.
+ */
+function focusToInput(clickedIndex: number) {
   nextTick(() => {
-    const targetInput = inputRefs.value[svgIndex]
-    if (targetInput) {
-      targetInput.focus()
+    const targetIndex = selectedShapeIndices.value.has(clickedIndex)
+      ? clickedIndex
+      : selectedShapeIndices.value.size > 0
+        ? Math.min(...selectedShapeIndices.value)
+        : null
+
+    if (targetIndex !== null) {
+      inputRefs.value[targetIndex]?.focus()
     }
   })
 }
 
+/**
+ * Handles clicks on input areas within list items.
+ * - With modifier keys: performs multi-select and handles focus appropriately
+ * - Without modifiers: selects unselected items, keeps selection for already selected items
+ */
+function handleInputAreaClick(index: number, event: MouseEvent) {
+  event.stopPropagation()
+
+  const hasModifier = event.ctrlKey || event.metaKey || event.shiftKey
+
+  if (hasModifier) {
+    toggleSelection(index, event)
+    // If item was unselected, blur current input and focus another selected item
+    if (!selectedShapeIndices.value.has(index)) {
+      ;(event.target as HTMLElement)?.blur?.()
+      focusToInput(index)
+    }
+  }
+  else if (!selectedShapeIndices.value.has(index)) {
+    // Select unselected item (single select)
+    selectedShapeIndices.value = new Set([index])
+    lastSelectedIndex.value = index
+  }
+}
+
+/** Handles 3D mesh click - converts index and triggers selection with focus */
+function handleMeshClick(index: number, event: PointerEvent) {
+  if (isDefaultSvg.value || isExporting.value)
+    return
+  selectAndFocus(toSvgIndex(index), event)
+}
+
+/** Returns true if batch edit should be applied (item is selected and multiple items are selected) */
+function shouldBatchEdit(index: number): boolean {
+  return selectedShapeIndices.value.has(index) && selectedShapeIndices.value.size > 1
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+/**
+ * Applies a numeric property change to selected shapes using delta-based modification.
+ * This preserves relative differences between shapes when batch editing.
+ */
+function batchEditNumericProperty(
+  index: number,
+  newValue: number,
+  getter: (shape: ShapeWithColor) => number,
+  setter: (shape: ShapeWithColor, value: number) => void,
+) {
+  if (shouldBatchEdit(index)) {
+    const delta = newValue - getter(svgShapes.value[index])
+    for (const i of selectedShapeIndices.value) {
+      const shape = svgShapes.value[i]
+      setter(shape, Number((getter(shape) + delta).toFixed(2)))
+    }
+  }
+  else {
+    setter(svgShapes.value[index], newValue)
+  }
+}
+
+/** Handles color change with batch support - applies same color to all selected shapes */
 function handleColorChange(index: number, color: string) {
-  svgShapes.value[index].color = new Color().setStyle(color)
+  const newColor = new Color().setStyle(color)
+  if (shouldBatchEdit(index)) {
+    for (const i of selectedShapeIndices.value) {
+      svgShapes.value[i].color = newColor.clone()
+    }
+  }
+  else {
+    svgShapes.value[index].color = newColor
+  }
+}
+
+/** Handles startZ change with batch support - uses delta-based modification, clamped to [-10, 10] */
+function handleStartZChange(index: number, value: number) {
+  const clampedValue = clampNumber(value, -10, 10)
+  batchEditNumericProperty(index, clampedValue, s => s.startZ, (s, v) => s.startZ = clampNumber(v, -10, 10))
+}
+
+/** Handles depth change with batch support - uses delta-based modification, clamped to [0, 10] */
+function handleDepthChange(index: number, value: number) {
+  const clampedValue = clampNumber(value, 0, 10)
+  batchEditNumericProperty(index, clampedValue, s => s.depth, (s, v) => s.depth = clampNumber(v, 0, 10))
 }
 
 function isValidSvg(code: string) {
@@ -268,7 +427,7 @@ function handleClose() {
   fileName.value = ''
   svgShapes.value = []
   svgCode.value = ''
-  selectedShapeIndex.value = null
+  clearSelection()
   editingInputIndex.value = null
   isExporting.value = false
   size.value = defaultSize
@@ -284,7 +443,8 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
     v-model:model-size="modelSize"
     v-model:model-offset="modelOffset"
     v-model:camera-position="cameraPosition"
-    v-model:selected-shape-index="selectedShownShapeIndex"
+    v-model:selected-shape-indices="selectedShownShapeIndices"
+    v-model:hover-shape-index="hoverShownShapeIndex"
     :shapes="shownShapes"
     :z-fighting="!isExporting"
     :scale="scale"
@@ -302,6 +462,7 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
     }"
     @model-loaded="() => {}"
     @mesh-click="handleMeshClick"
+    @pointer-missed="clearSelection"
   />
   <div flex="~ col gap-6" p4 rounded-4 bg-white:50 max-w-340px w-full left-10 top-10 fixed z-999 of-y-auto backdrop-blur-md dark:bg-black:50 max-h="[calc(100vh-160px)]">
     <div flex="~ col gap-2">
@@ -377,17 +538,20 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
           v-for="(item, index) in svgShapes"
           :key="index"
           flex="~ gap-4"
-          class="px-2 border rounded transition-colors duration-200"
+          class="px-2 border rounded cursor-pointer select-none transition-colors duration-200"
           :class="[
-            (editingInputIndex !== null ? editingInputIndex === index : selectedShapeIndex === index)
+            selectedShapeIndices.has(index) || editingInputIndex === index
               ? 'dark:border-white border-black'
-              : 'border-transparent hover:border-gray-500/50',
+              : hoverShapeIndex === index
+                ? 'border-gray-500/50'
+                : 'border-transparent hover:border-gray-500/50',
             item.depth === 0 ? 'op-50' : '',
           ]"
-          @mouseenter="selectedShapeIndex = index"
-          @mouseleave="selectedShapeIndex = null"
+          @mouseenter="hoverShapeIndex = index"
+          @mouseleave="hoverShapeIndex = null"
+          @click="selectAndFocus(index, $event)"
         >
-          <div flex="~ gap-2 items-center py-3" relative :title="`Shape ${index + 1}`">
+          <div flex="~ gap-2 items-center py-3" relative :title="`Shape ${index + 1}`" @click="handleInputAreaClick(index, $event)">
             <label
               class="border rounded h-5 min-h-5 min-w-5 w-5 cursor-pointer transition-all duration-200 has-focus:scale-120 has-hover:scale-110"
               :title="`Color: #${item.color.getHexString()}`"
@@ -406,7 +570,7 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
           </div>
           <IconInput
             :ref="el => inputRefs[index] = (el as any)"
-            v-model:value="item.startZ"
+            :value="item.startZ"
             icon="i-iconoir-position"
             type="number"
             :min="-10"
@@ -414,11 +578,13 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
             :step="0.1"
             title="Starting Point"
             class="py-3 flex-1"
+            @click="handleInputAreaClick(index, $event)"
+            @update:value="handleStartZChange(index, $event)"
             @focus="editingInputIndex = index"
             @blur="editingInputIndex = null"
           />
           <IconInput
-            v-model:value="item.depth"
+            :value="item.depth"
             icon="i-iconoir-extrude"
             type="number"
             :min="0"
@@ -426,6 +592,8 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
             :step="0.1"
             title="Extrude Depth"
             class="py-3 flex-1"
+            @click="handleInputAreaClick(index, $event)"
+            @update:value="handleDepthChange(index, $event)"
             @focus="editingInputIndex = index"
             @blur="editingInputIndex = null"
           />
