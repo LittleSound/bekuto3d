@@ -36,8 +36,8 @@ const {
 // 默认模型信息
 const DEFAULT_SVG = '/model/bekuto3d.svg'
 const isDefaultSvg = ref(false)
-const defaultSvgOffsetList = [0, 2.1]
-const defaultSvgDepthList = [2.1, 0, 1, 1, 1, 2, 1, 1.4, 1.6]
+const defaultSvgOffsetList = [0, 2]
+const defaultSvgDepthList = [2, 0, 1, 1, 1, 2, 1, 1.4, 1.6]
 
 const { createShapesWithColor } = useSvgLoader()
 
@@ -78,6 +78,24 @@ async function loadDefaultSvg() {
   }
   catch (error) {
     console.error('加载默认 SVG 失败:', error)
+  }
+}
+
+async function handlePlayDemo() {
+  try {
+    const response = await fetch(DEFAULT_SVG)
+    const svgData = await response.text()
+    svgCode.value = ''
+    fileName.value = 'bekuto3d-logo.svg'
+
+    mountSVG(svgData, (shapes, _) => shapes.map((item, index) => {
+      item.startZ = defaultSvgOffsetList[index] ?? defaultSvgOffsetList[defaultSvgOffsetList.length - 1] ?? 0
+      item.depth = defaultSvgDepthList[index] ?? 2
+      return item
+    }))
+  }
+  catch (error) {
+    console.error('加载 Demo SVG 失败:', error)
   }
 }
 
@@ -520,6 +538,27 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
           Convert
         </button>
       </template>
+
+      <div v-if="!svgCode && !isLoaded" flex="~ gap-3 items-center justify-between" mt-2>
+        <button
+          class="text-sm op-80 flex gap-2 cursor-pointer transition-opacity items-center hover:op-100"
+          type="button"
+          @click="handlePlayDemo"
+        >
+          <span i-iconoir-arcade />
+          <span>Play demo</span>
+        </button>
+        <a
+          class="text-sm op-80 flex gap-2 transition-opacity items-center hover:op-100"
+          href="https://icones.js.org/collection/skill-icons"
+          rel="noreferrer"
+          target="_blank"
+          title="Find SVG logos"
+        >
+          <span>Find an SVG to start</span>
+          <span i-iconoir-open-new-window />
+        </a>
+      </div>
     </div>
     <template v-if="isLoaded">
       <div flex="~ gap-2 items-center">

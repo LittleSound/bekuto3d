@@ -10,7 +10,7 @@ This project is an AI SDK, similar to the Vercel AI SDK.
 
 ## Research, Design, Implement - Three-Step Workflow
 
-Design documents are stored in [/note](/note)
+Design documents are stored in [/notes](/notes)
 
 When you receive a requirement, first check if related design documents exist. If so, read them first.
 If not, create corresponding design documents with appropriate folder organization.
