@@ -551,7 +551,7 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
           v-for="(item, index) in svgShapes"
           :key="index"
           flex="~ gap-4"
-          class="px-2 border rounded cursor-pointer transition-colors duration-200"
+          class="px-2 border rounded cursor-pointer select-none transition-colors duration-200"
           :class="[
             selectedShapeIndices.has(index) || editingInputIndex === index
               ? 'dark:border-white border-black'
