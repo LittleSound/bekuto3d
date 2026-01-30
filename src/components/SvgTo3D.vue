@@ -319,6 +319,14 @@ function handleInputAreaClick(index: number, event: MouseEvent) {
   if (isCtrlOrCmd || isShift) {
     // 有修饰键时，执行多选逻辑
     toggleSelection(index, event)
+
+    // 如果该项被取消选中了，需要失焦并聚焦到其他选中项
+    if (!selectedShapeIndices.value.has(index)) {
+      // 让当前输入框失焦
+      ;(event.target as HTMLElement)?.blur?.()
+      // 聚焦到其他选中项
+      focusToInput(index)
+    }
   }
   else {
     // 没有修饰键时
