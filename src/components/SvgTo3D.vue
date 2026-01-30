@@ -273,10 +273,40 @@ function toggleSelection(index: number, event?: MouseEvent | PointerEvent) {
   }
 }
 
+// 选择并聚焦（用于点击列表项或 canvas 模型时）
+function selectAndFocus(index: number, event?: MouseEvent | PointerEvent) {
+  toggleSelection(index, event)
+  focusToInput(index)
+}
+
 // 取消全选
 function clearSelection() {
   selectedShapeIndices.value = new Set()
   lastSelectedIndex.value = null
+}
+
+// 聚焦到输入框
+// clickedIndex: 用户点击的项的索引，用于决定优先聚焦哪个
+function focusToInput(clickedIndex: number) {
+  nextTick(() => {
+    let targetIndex: number | null = null
+
+    if (selectedShapeIndices.value.has(clickedIndex)) {
+      // 如果点击的项在选中集合中，聚焦到它
+      targetIndex = clickedIndex
+    }
+    else if (selectedShapeIndices.value.size > 0) {
+      // 否则聚焦到选中集合中的第一个
+      targetIndex = Math.min(...selectedShapeIndices.value)
+    }
+
+    if (targetIndex !== null) {
+      const targetInput = inputRefs.value[targetIndex]
+      if (targetInput) {
+        targetInput.focus()
+      }
+    }
+  })
 }
 
 // 处理输入框区域的点击
@@ -306,17 +336,7 @@ function handleMeshClick(index: number, event: PointerEvent) {
     return
 
   const svgIndex = toSvgIndex(index)
-  toggleSelection(svgIndex, event)
-
-  // 如果不是多选模式，聚焦到对应的输入框
-  if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
-    nextTick(() => {
-      const targetInput = inputRefs.value[svgIndex]
-      if (targetInput) {
-        targetInput.focus()
-      }
-    })
-  }
+  selectAndFocus(svgIndex, event)
 }
 
 function handleColorChange(index: number, color: string) {
@@ -534,7 +554,7 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
           ]"
           @mouseenter="hoverShapeIndex = index"
           @mouseleave="hoverShapeIndex = null"
-          @click="toggleSelection(index, $event)"
+          @click="selectAndFocus(index, $event)"
         >
           <div flex="~ gap-2 items-center py-3" relative :title="`Shape ${index + 1}`" @click="handleInputAreaClick(index, $event)">
             <label
