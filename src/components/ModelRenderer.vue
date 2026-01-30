@@ -47,6 +47,7 @@ const emit = defineEmits<{
   (e: 'update:modelOffset', offset: ModelOffset): void
   (e: 'modelLoaded'): void
   (e: 'meshClick', index: number, event: PointerEvent): void
+  (e: 'pointerMissed'): void
 }>()
 
 const selectedShapeIndices = defineModel<Set<number>>('selectedShapeIndices', {
@@ -209,7 +210,7 @@ defineExpose({
 </script>
 
 <template>
-  <TresCanvas window-size :clear-color="isDark ? '#437568' : '#82DBC5'" :logarithmic-depth-buffer="true">
+  <TresCanvas window-size :clear-color="isDark ? '#437568' : '#82DBC5'" :logarithmic-depth-buffer="true" @pointer-missed="emit('pointerMissed')">
     <TresPerspectiveCamera
       :position="cameraPosition"
       :look-at="[0, 0, 0]"

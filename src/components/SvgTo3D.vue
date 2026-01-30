@@ -279,6 +279,28 @@ function clearSelection() {
   lastSelectedIndex.value = null
 }
 
+// 处理输入框区域的点击
+function handleInputAreaClick(index: number, event: MouseEvent) {
+  event.stopPropagation()
+
+  const isCtrlOrCmd = event.ctrlKey || event.metaKey
+  const isShift = event.shiftKey
+
+  if (isCtrlOrCmd || isShift) {
+    // 有修饰键时，执行多选逻辑
+    toggleSelection(index, event)
+  }
+  else {
+    // 没有修饰键时
+    if (!selectedShapeIndices.value.has(index)) {
+      // 如果当前项未被选中，选中当前项（单选）
+      selectedShapeIndices.value = new Set([index])
+      lastSelectedIndex.value = index
+    }
+    // 如果当前项已被选中，保持选择状态不变
+  }
+}
+
 function handleMeshClick(index: number, event: PointerEvent) {
   if (isDefaultSvg.value || isExporting.value)
     return
@@ -425,6 +447,7 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
     }"
     @model-loaded="() => {}"
     @mesh-click="handleMeshClick"
+    @pointer-missed="clearSelection"
   />
   <div flex="~ col gap-6" p4 rounded-4 bg-white:50 max-w-340px w-full left-10 top-10 fixed z-999 of-y-auto backdrop-blur-md dark:bg-black:50 max-h="[calc(100vh-160px)]">
     <div flex="~ col gap-2">
@@ -513,7 +536,7 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
           @mouseleave="hoverShapeIndex = null"
           @click="toggleSelection(index, $event)"
         >
-          <div flex="~ gap-2 items-center py-3" relative :title="`Shape ${index + 1}`" @click.stop>
+          <div flex="~ gap-2 items-center py-3" relative :title="`Shape ${index + 1}`" @click="handleInputAreaClick(index, $event)">
             <label
               class="border rounded h-5 min-h-5 min-w-5 w-5 cursor-pointer transition-all duration-200 has-focus:scale-120 has-hover:scale-110"
               :title="`Color: #${item.color.getHexString()}`"
@@ -540,7 +563,7 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
             :step="0.1"
             title="Starting Point"
             class="py-3 flex-1"
-            @click.stop
+            @click="handleInputAreaClick(index, $event)"
             @update:value="handleStartZChange(index, $event)"
             @focus="editingInputIndex = index"
             @blur="editingInputIndex = null"
@@ -554,7 +577,7 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
             :step="0.1"
             title="Extrude Depth"
             class="py-3 flex-1"
-            @click.stop
+            @click="handleInputAreaClick(index, $event)"
             @update:value="handleDepthChange(index, $event)"
             @focus="editingInputIndex = index"
             @blur="editingInputIndex = null"
