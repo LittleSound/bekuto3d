@@ -273,26 +273,11 @@ function toggleSelection(index: number, event?: MouseEvent | PointerEvent) {
   }
 }
 
-// 全选
-function selectAll() {
-  if (isDefaultSvg.value || isExporting.value)
-    return
-  selectedShapeIndices.value = new Set(svgShapes.value.map((_, i) => i))
-}
-
 // 取消全选
 function clearSelection() {
   selectedShapeIndices.value = new Set()
   lastSelectedIndex.value = null
 }
-
-// 检查是否全选
-const isAllSelected = computed(() => {
-  return svgShapes.value.length > 0 && selectedShapeIndices.value.size === svgShapes.value.length
-})
-
-// 检查是否有选中项
-const hasSelection = computed(() => selectedShapeIndices.value.size > 0)
 
 function handleMeshClick(index: number, event: PointerEvent) {
   if (isDefaultSvg.value || isExporting.value)
@@ -313,7 +298,42 @@ function handleMeshClick(index: number, event: PointerEvent) {
 }
 
 function handleColorChange(index: number, color: string) {
-  svgShapes.value[index].color = new Color().setStyle(color)
+  const newColor = new Color().setStyle(color)
+  // 如果当前项在选中集合中，批量修改所有选中项
+  if (selectedShapeIndices.value.has(index) && selectedShapeIndices.value.size > 1) {
+    for (const i of selectedShapeIndices.value) {
+      svgShapes.value[i].color = newColor.clone()
+    }
+  }
+  else {
+    svgShapes.value[index].color = newColor
+  }
+}
+
+function handleStartZChange(index: number, value: number) {
+  // 如果当前项在选中集合中，批量修改所有选中项
+  if (selectedShapeIndices.value.has(index) && selectedShapeIndices.value.size > 1) {
+    const delta = value - svgShapes.value[index].startZ
+    for (const i of selectedShapeIndices.value) {
+      svgShapes.value[i].startZ = Number((svgShapes.value[i].startZ + delta).toFixed(2))
+    }
+  }
+  else {
+    svgShapes.value[index].startZ = value
+  }
+}
+
+function handleDepthChange(index: number, value: number) {
+  // 如果当前项在选中集合中，批量修改所有选中项
+  if (selectedShapeIndices.value.has(index) && selectedShapeIndices.value.size > 1) {
+    const delta = value - svgShapes.value[index].depth
+    for (const i of selectedShapeIndices.value) {
+      svgShapes.value[i].depth = Math.max(0, Number((svgShapes.value[i].depth + delta).toFixed(2)))
+    }
+  }
+  else {
+    svgShapes.value[index].depth = value
+  }
 }
 
 function isValidSvg(code: string) {
@@ -475,29 +495,6 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
         <div flex-1 />
         <div>unit: <span text-blue>mm</span></div>
       </div>
-      <!-- 多选工具栏 -->
-      <div flex="~ gap-2 items-center justify-between" text-sm>
-        <div flex="~ gap-2 items-center">
-          <button
-            class="px-2 py-1 rounded bg-black/10 transition-colors dark:bg-white/20 hover:bg-black/20 dark:hover:bg-white/30"
-            :title="isAllSelected ? 'Deselect all' : 'Select all'"
-            @click="isAllSelected ? clearSelection() : selectAll()"
-          >
-            {{ isAllSelected ? 'Deselect all' : 'Select all' }}
-          </button>
-          <button
-            v-if="hasSelection"
-            class="px-2 py-1 rounded bg-black/10 transition-colors dark:bg-white/20 hover:bg-black/20 dark:hover:bg-white/30"
-            title="Clear selection"
-            @click="clearSelection()"
-          >
-            Clear
-          </button>
-        </div>
-        <div v-if="hasSelection" op-70>
-          {{ selectedShapeIndices.size }} / {{ svgShapes.length }} selected
-        </div>
-      </div>
       <div flex="~ col">
         <div
           v-for="(item, index) in svgShapes"
@@ -516,7 +513,7 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
           @mouseleave="hoverShapeIndex = null"
           @click="toggleSelection(index, $event)"
         >
-          <div flex="~ gap-2 items-center py-3" relative :title="`Shape ${index + 1}`">
+          <div flex="~ gap-2 items-center py-3" relative :title="`Shape ${index + 1}`" @click.stop>
             <label
               class="border rounded h-5 min-h-5 min-w-5 w-5 cursor-pointer transition-all duration-200 has-focus:scale-120 has-hover:scale-110"
               :title="`Color: #${item.color.getHexString()}`"
@@ -535,7 +532,7 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
           </div>
           <IconInput
             :ref="el => inputRefs[index] = (el as any)"
-            v-model:value="item.startZ"
+            :value="item.startZ"
             icon="i-iconoir-position"
             type="number"
             :min="-10"
@@ -543,11 +540,13 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
             :step="0.1"
             title="Starting Point"
             class="py-3 flex-1"
+            @click.stop
+            @update:value="handleStartZChange(index, $event)"
             @focus="editingInputIndex = index"
             @blur="editingInputIndex = null"
           />
           <IconInput
-            v-model:value="item.depth"
+            :value="item.depth"
             icon="i-iconoir-extrude"
             type="number"
             :min="0"
@@ -555,6 +554,8 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
             :step="0.1"
             title="Extrude Depth"
             class="py-3 flex-1"
+            @click.stop
+            @update:value="handleDepthChange(index, $event)"
             @focus="editingInputIndex = index"
             @blur="editingInputIndex = null"
           />
