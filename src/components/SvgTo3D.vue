@@ -176,54 +176,41 @@ function toSvgIndex(index: number) {
   return svgShapes.value.findIndex(s => s === shownShapes.value[index])
 }
 
-// 将 svgShapes 索引集合转换为 shownShapes 索引集合
-function toShownIndices(indices: Set<number>): Set<number> {
+/** Converts a Set of indices using a mapping function, filtering out invalid (-1) results */
+function mapIndices(indices: Set<number>, mapper: (index: number) => number): Set<number> {
   const result = new Set<number>()
   for (const index of indices) {
-    const shownIndex = toShownIndex(index)
-    if (shownIndex !== -1) {
-      result.add(shownIndex)
+    const mapped = mapper(index)
+    if (mapped !== -1) {
+      result.add(mapped)
     }
   }
   return result
 }
 
-// 将 shownShapes 索引集合转换为 svgShapes 索引集合
-function toSvgIndices(indices: Set<number>): Set<number> {
-  const result = new Set<number>()
-  for (const index of indices) {
-    const svgIndex = toSvgIndex(index)
-    if (svgIndex !== -1) {
-      result.add(svgIndex)
-    }
-  }
-  return result
-}
-
-// 用于 ModelRenderer 的双向绑定
+/** Computed property for ModelRenderer binding - converts between svgShapes and shownShapes indices */
 const selectedShownShapeIndices = computed({
   get: () => {
     if (isExporting.value)
       return new Set<number>()
-    return toShownIndices(selectedShapeIndices.value)
+    return mapIndices(selectedShapeIndices.value, toShownIndex)
   },
   set: (indices: Set<number>) => {
     if (isDefaultSvg.value || isExporting.value)
       return
-    selectedShapeIndices.value = toSvgIndices(indices)
+    selectedShapeIndices.value = mapIndices(indices, toSvgIndex)
   },
 })
 
-// hover 索引转换
+/** Computed property for hover state - prioritizes editingInputIndex over hoverShapeIndex */
 const hoverShownShapeIndex = computed({
   get: () => {
-    if (isExporting.value || hoverShapeIndex.value === null)
+    if (isExporting.value)
       return null
-    if (editingInputIndex.value !== null) {
-      const shownIndex = toShownIndex(editingInputIndex.value)
-      return shownIndex === -1 ? null : shownIndex
-    }
-    const shownIndex = toShownIndex(hoverShapeIndex.value)
+    const sourceIndex = editingInputIndex.value ?? hoverShapeIndex.value
+    if (sourceIndex === null)
+      return null
+    const shownIndex = toShownIndex(sourceIndex)
     return shownIndex === -1 ? null : shownIndex
   },
   set: (index: number | null) => {
@@ -233,7 +220,12 @@ const hoverShownShapeIndex = computed({
   },
 })
 
-// 选择操作函数
+/**
+ * Handles selection logic with support for Ctrl/Cmd (toggle) and Shift (range) modifiers.
+ * - Normal click: single select
+ * - Ctrl/Cmd + click: toggle selection
+ * - Shift + click: range select from lastSelectedIndex
+ */
 function toggleSelection(index: number, event?: MouseEvent | PointerEvent) {
   if (isDefaultSvg.value || isExporting.value)
     return
@@ -242,115 +234,119 @@ function toggleSelection(index: number, event?: MouseEvent | PointerEvent) {
   const isShift = event?.shiftKey
 
   if (isShift && lastSelectedIndex.value !== null) {
-    // Shift + 点击：范围选择
     const start = Math.min(lastSelectedIndex.value, index)
     const end = Math.max(lastSelectedIndex.value, index)
-    if (!isCtrlOrCmd) {
-      selectedShapeIndices.value = new Set()
-    }
+    const rangeSet = isCtrlOrCmd ? new Set(selectedShapeIndices.value) : new Set<number>()
     for (let i = start; i <= end; i++) {
-      selectedShapeIndices.value.add(i)
+      rangeSet.add(i)
     }
-    // 触发响应式更新
-    selectedShapeIndices.value = new Set(selectedShapeIndices.value)
+    selectedShapeIndices.value = rangeSet
   }
   else if (isCtrlOrCmd) {
-    // Ctrl/Cmd + 点击：切换单个选择
     const newSet = new Set(selectedShapeIndices.value)
-    if (newSet.has(index)) {
-      newSet.delete(index)
-    }
-    else {
-      newSet.add(index)
-    }
+    newSet.has(index) ? newSet.delete(index) : newSet.add(index)
     selectedShapeIndices.value = newSet
     lastSelectedIndex.value = index
   }
   else {
-    // 普通点击：单选
     selectedShapeIndices.value = new Set([index])
     lastSelectedIndex.value = index
   }
 }
 
-// 选择并聚焦（用于点击列表项或 canvas 模型时）
+/** Selects the item and focuses its input. Used when clicking list items or canvas models. */
 function selectAndFocus(index: number, event?: MouseEvent | PointerEvent) {
   toggleSelection(index, event)
   focusToInput(index)
 }
 
-// 取消全选
+/** Clears all selections */
 function clearSelection() {
   selectedShapeIndices.value = new Set()
   lastSelectedIndex.value = null
 }
 
-// 聚焦到输入框
-// clickedIndex: 用户点击的项的索引，用于决定优先聚焦哪个
+/**
+ * Focuses the input of the appropriate selected item.
+ * Prioritizes the clicked item if selected, otherwise focuses the first selected item.
+ */
 function focusToInput(clickedIndex: number) {
   nextTick(() => {
-    let targetIndex: number | null = null
-
-    if (selectedShapeIndices.value.has(clickedIndex)) {
-      // 如果点击的项在选中集合中，聚焦到它
-      targetIndex = clickedIndex
-    }
-    else if (selectedShapeIndices.value.size > 0) {
-      // 否则聚焦到选中集合中的第一个
-      targetIndex = Math.min(...selectedShapeIndices.value)
-    }
+    const targetIndex = selectedShapeIndices.value.has(clickedIndex)
+      ? clickedIndex
+      : selectedShapeIndices.value.size > 0
+        ? Math.min(...selectedShapeIndices.value)
+        : null
 
     if (targetIndex !== null) {
-      const targetInput = inputRefs.value[targetIndex]
-      if (targetInput) {
-        targetInput.focus()
-      }
+      inputRefs.value[targetIndex]?.focus()
     }
   })
 }
 
-// 处理输入框区域的点击
+/**
+ * Handles clicks on input areas within list items.
+ * - With modifier keys: performs multi-select and handles focus appropriately
+ * - Without modifiers: selects unselected items, keeps selection for already selected items
+ */
 function handleInputAreaClick(index: number, event: MouseEvent) {
   event.stopPropagation()
 
-  const isCtrlOrCmd = event.ctrlKey || event.metaKey
-  const isShift = event.shiftKey
+  const hasModifier = event.ctrlKey || event.metaKey || event.shiftKey
 
-  if (isCtrlOrCmd || isShift) {
-    // 有修饰键时，执行多选逻辑
+  if (hasModifier) {
     toggleSelection(index, event)
-
-    // 如果该项被取消选中了，需要失焦并聚焦到其他选中项
+    // If item was unselected, blur current input and focus another selected item
     if (!selectedShapeIndices.value.has(index)) {
-      // 让当前输入框失焦
       ;(event.target as HTMLElement)?.blur?.()
-      // 聚焦到其他选中项
       focusToInput(index)
     }
   }
-  else {
-    // 没有修饰键时
-    if (!selectedShapeIndices.value.has(index)) {
-      // 如果当前项未被选中，选中当前项（单选）
-      selectedShapeIndices.value = new Set([index])
-      lastSelectedIndex.value = index
-    }
-    // 如果当前项已被选中，保持选择状态不变
+  else if (!selectedShapeIndices.value.has(index)) {
+    // Select unselected item (single select)
+    selectedShapeIndices.value = new Set([index])
+    lastSelectedIndex.value = index
   }
 }
 
+/** Handles 3D mesh click - converts index and triggers selection with focus */
 function handleMeshClick(index: number, event: PointerEvent) {
   if (isDefaultSvg.value || isExporting.value)
     return
-
-  const svgIndex = toSvgIndex(index)
-  selectAndFocus(svgIndex, event)
+  selectAndFocus(toSvgIndex(index), event)
 }
 
+/** Returns true if batch edit should be applied (item is selected and multiple items are selected) */
+function shouldBatchEdit(index: number): boolean {
+  return selectedShapeIndices.value.has(index) && selectedShapeIndices.value.size > 1
+}
+
+/**
+ * Applies a numeric property change to selected shapes using delta-based modification.
+ * This preserves relative differences between shapes when batch editing.
+ */
+function batchEditNumericProperty(
+  index: number,
+  newValue: number,
+  getter: (shape: ShapeWithColor) => number,
+  setter: (shape: ShapeWithColor, value: number) => void,
+) {
+  if (shouldBatchEdit(index)) {
+    const delta = newValue - getter(svgShapes.value[index])
+    for (const i of selectedShapeIndices.value) {
+      const shape = svgShapes.value[i]
+      setter(shape, Number((getter(shape) + delta).toFixed(2)))
+    }
+  }
+  else {
+    setter(svgShapes.value[index], newValue)
+  }
+}
+
+/** Handles color change with batch support - applies same color to all selected shapes */
 function handleColorChange(index: number, color: string) {
   const newColor = new Color().setStyle(color)
-  // 如果当前项在选中集合中，批量修改所有选中项
-  if (selectedShapeIndices.value.has(index) && selectedShapeIndices.value.size > 1) {
+  if (shouldBatchEdit(index)) {
     for (const i of selectedShapeIndices.value) {
       svgShapes.value[i].color = newColor.clone()
     }
@@ -360,30 +356,14 @@ function handleColorChange(index: number, color: string) {
   }
 }
 
+/** Handles startZ change with batch support - uses delta-based modification */
 function handleStartZChange(index: number, value: number) {
-  // 如果当前项在选中集合中，批量修改所有选中项
-  if (selectedShapeIndices.value.has(index) && selectedShapeIndices.value.size > 1) {
-    const delta = value - svgShapes.value[index].startZ
-    for (const i of selectedShapeIndices.value) {
-      svgShapes.value[i].startZ = Number((svgShapes.value[i].startZ + delta).toFixed(2))
-    }
-  }
-  else {
-    svgShapes.value[index].startZ = value
-  }
+  batchEditNumericProperty(index, value, s => s.startZ, (s, v) => s.startZ = v)
 }
 
+/** Handles depth change with batch support - uses delta-based modification, clamped to >= 0 */
 function handleDepthChange(index: number, value: number) {
-  // 如果当前项在选中集合中，批量修改所有选中项
-  if (selectedShapeIndices.value.has(index) && selectedShapeIndices.value.size > 1) {
-    const delta = value - svgShapes.value[index].depth
-    for (const i of selectedShapeIndices.value) {
-      svgShapes.value[i].depth = Math.max(0, Number((svgShapes.value[i].depth + delta).toFixed(2)))
-    }
-  }
-  else {
-    svgShapes.value[index].depth = value
-  }
+  batchEditNumericProperty(index, value, s => s.depth, (s, v) => s.depth = Math.max(0, v))
 }
 
 function isValidSvg(code: string) {
