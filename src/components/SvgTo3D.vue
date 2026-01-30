@@ -241,6 +241,7 @@ function toggleSelection(index: number, event?: MouseEvent | PointerEvent) {
       rangeSet.add(i)
     }
     selectedShapeIndices.value = rangeSet
+    lastSelectedIndex.value = index
   }
   else if (isCtrlOrCmd) {
     const newSet = new Set(selectedShapeIndices.value)
@@ -321,6 +322,10 @@ function shouldBatchEdit(index: number): boolean {
   return selectedShapeIndices.value.has(index) && selectedShapeIndices.value.size > 1
 }
 
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
 /**
  * Applies a numeric property change to selected shapes using delta-based modification.
  * This preserves relative differences between shapes when batch editing.
@@ -356,14 +361,16 @@ function handleColorChange(index: number, color: string) {
   }
 }
 
-/** Handles startZ change with batch support - uses delta-based modification */
+/** Handles startZ change with batch support - uses delta-based modification, clamped to [-10, 10] */
 function handleStartZChange(index: number, value: number) {
-  batchEditNumericProperty(index, value, s => s.startZ, (s, v) => s.startZ = v)
+  const clampedValue = clampNumber(value, -10, 10)
+  batchEditNumericProperty(index, clampedValue, s => s.startZ, (s, v) => s.startZ = clampNumber(v, -10, 10))
 }
 
-/** Handles depth change with batch support - uses delta-based modification, clamped to >= 0 */
+/** Handles depth change with batch support - uses delta-based modification, clamped to [0, 10] */
 function handleDepthChange(index: number, value: number) {
-  batchEditNumericProperty(index, value, s => s.depth, (s, v) => s.depth = Math.max(0, v))
+  const clampedValue = clampNumber(value, 0, 10)
+  batchEditNumericProperty(index, clampedValue, s => s.depth, (s, v) => s.depth = clampNumber(v, 0, 10))
 }
 
 function isValidSvg(code: string) {

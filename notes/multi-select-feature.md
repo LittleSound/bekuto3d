@@ -60,3 +60,5 @@ After selection changes, the position input of an appropriate item is focused:
 - When adding new selection-related features, remember to handle both `svgShapes` and `shownShapes` index spaces
 - The `shouldBatchEdit()` check requires both: item is in selection AND multiple items selected
 - Always use `new Set()` to trigger Vue reactivity when modifying selection state
+- Shift range selection should update `lastSelectedIndex` to the clicked item so subsequent Shift+click uses the latest anchor
+- Batch editing numeric inputs should respect UI constraints (e.g. clamp `startZ` to `[-10, 10]`, `depth` to `[0, 10]`) because delta-based edits can push other selected items out of range

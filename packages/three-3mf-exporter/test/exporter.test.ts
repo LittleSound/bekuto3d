@@ -1,10 +1,10 @@
+import JSZip from 'jszip'
+import * as THREE from 'three'
+import { BoxGeometry, Mesh, MeshStandardMaterial } from 'three'
 /**
  * @vitest-environment jsdom
  */
 import { describe, expect, it } from 'vitest'
-import * as THREE from 'three'
-import { BoxGeometry, Mesh, MeshStandardMaterial } from 'three'
-import JSZip from 'jszip'
 import { exportTo3MF } from '../src/index'
 
 async function getZip(blob: Blob) {
@@ -50,7 +50,7 @@ describe('three-3mf-exporter', () => {
     expect(modelXml).toContain('<components>')
     expect(modelXml).toContain('<component objectid="1" transform="')
     expect(modelXml).toContain('<component objectid="2" transform="')
-    
+
     expect(modelXml).toContain('<item objectid="3"')
   })
 
@@ -60,15 +60,15 @@ describe('three-3mf-exporter', () => {
     groupA.name = 'GroupA'
     const groupB = new THREE.Group()
     groupB.name = 'GroupB'
-    
+
     const meshA1 = new Mesh(new BoxGeometry(1, 1, 1))
     meshA1.name = 'MeshA1'
     groupA.add(meshA1)
-    
+
     const meshB1 = new Mesh(new BoxGeometry(1, 1, 1))
     meshB1.name = 'MeshB1'
     groupB.add(meshB1)
-    
+
     scene.add(groupA)
     scene.add(groupB)
 
@@ -79,10 +79,10 @@ describe('three-3mf-exporter', () => {
     // MeshA1 -> 1, GroupA -> 2, MeshB1 -> 3, GroupB -> 4
     expect(modelXml).toContain('<object id="2" type="model" name="GroupA">')
     expect(modelXml).toContain('<object id="4" type="model" name="GroupB">')
-    
+
     const groupAObj = modelXml.match(/<object id="2"[^>]*>([\s\S]*?)<\/object>/)![1]
     expect(groupAObj).toContain('objectid="1"')
-    
+
     expect(modelXml).toContain('<item objectid="2"')
     expect(modelXml).toContain('<item objectid="4"')
   })
@@ -119,19 +119,19 @@ describe('three-3mf-exporter', () => {
 
   it('should export a Scene with mixed content correctly (multiple meshes and groups)', async () => {
     const scene = new THREE.Scene()
-    
+
     // 1. A single mesh
     const soloMesh = new Mesh(new BoxGeometry(1, 1, 1))
     soloMesh.name = 'SoloMesh'
     scene.add(soloMesh)
-    
+
     // 2. A group
     const group = new THREE.Group()
     group.name = 'GroupObj'
     group.add(new Mesh(new BoxGeometry(1, 1, 1)))
     group.add(new Mesh(new BoxGeometry(1, 1, 1)))
     scene.add(group)
-    
+
     // 3. Another mesh
     const secondSoloMesh = new Mesh(new BoxGeometry(1, 1, 1))
     secondSoloMesh.name = 'SecondSolo'
@@ -144,11 +144,11 @@ describe('three-3mf-exporter', () => {
     // SoloMesh -> 1
     // GroupMesh1 -> 2, GroupMesh2 -> 3, GroupObj -> 4
     // SecondSolo -> 5
-    
+
     expect(modelXml).toContain('<object id="1" type="model" name="SoloMesh">')
     expect(modelXml).toContain('<object id="4" type="model" name="GroupObj">')
     expect(modelXml).toContain('<object id="5" type="model" name="SecondSolo">')
-    
+
     expect(modelXml).toContain('<item objectid="1"')
     expect(modelXml).toContain('<item objectid="4"')
     expect(modelXml).toContain('<item objectid="5"')
