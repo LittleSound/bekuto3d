@@ -42,6 +42,7 @@ interface PrintConfig {
   printerSettingsId: string // 打印机设置ID / Printer Settings ID
   printSettingsId: string // 打印设置ID / Print Settings ID
   compression: 'none' | 'standard' // 压缩方式 / Compression Method
+  seam_position?: 'nearest' | 'aligned' | 'back' | 'random' // 缝合位置 / Seam Position
 
   metadata: Partial<{ Application: string, Copyright: string, ApplicationTitle: string }>
 }
@@ -448,6 +449,7 @@ function createProjectSettingsConfig(materials: MaterialInfo[], printConfig: Pri
     enable_support: '0',
     support_type: 'normal(auto)',
     print_settings_id: printConfig.printSettingsId,
+    ...(printConfig.seam_position && { seam_position: printConfig.seam_position }),
   }
   return JSON.stringify(projectSettings)
 }
