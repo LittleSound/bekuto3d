@@ -53,6 +53,7 @@ const blob = await exportTo3MF(meshOrGroup, {
   printableHeight: 256,
   printerSettingsId: 'Bambu Lab A1 0.4 nozzle',
   printSettingsId: '0.20mm Standard @BBL A1',
+  seam_position: 'back',
 
   // Compression method, can be either 'standard' or 'none'. Default is 'standard'.
   compression: 'standard',

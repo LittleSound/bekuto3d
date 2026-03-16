@@ -43,7 +43,7 @@ interface PrintConfig {
   printSettingsId: string // 打印设置ID / Print Settings ID
   compression: 'none' | 'standard' // 压缩方式 / Compression Method
   seam_position?: 'nearest' | 'aligned' | 'back' | 'random' // 缝合位置 / Seam Position
-
+  different_settings_to_system: string[]
   metadata: Partial<{ Application: string, Copyright: string, ApplicationTitle: string }>
 }
 
@@ -431,7 +431,9 @@ function createProjectSettingsConfig(materials: MaterialInfo[], printConfig: Pri
   while (colors.length < 2) {
     colors.push('#FFFFFF')
   }
-  const projectSettings = {
+  const different_settings_to_system = new Set(printConfig.different_settings_to_system || [])
+
+  const projectSettings: Record<string, unknown> = {
     printable_area: printConfig.printableArea,
     printable_height: printConfig.printableHeight.toString(),
     bed_exclude_area: [],
@@ -449,8 +451,17 @@ function createProjectSettingsConfig(materials: MaterialInfo[], printConfig: Pri
     enable_support: '0',
     support_type: 'normal(auto)',
     print_settings_id: printConfig.printSettingsId,
-    ...(printConfig.seam_position && { seam_position: printConfig.seam_position }),
   }
+
+  if (printConfig.seam_position) {
+    projectSettings.seam_position = printConfig.seam_position
+    different_settings_to_system.add('seam_position')
+  }
+
+  if (different_settings_to_system.size > 0) {
+    projectSettings.different_settings_to_system = Array.from(different_settings_to_system)
+  }
+
   return JSON.stringify(projectSettings)
 }
 
