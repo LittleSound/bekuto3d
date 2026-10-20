@@ -8,3 +8,7 @@ node_modules
 node-compile-cache
 .idea/
 *.log
+
+# Claude Code local settings and agent worktrees
+.claude/settings.local.json
+.claude/worktrees/
