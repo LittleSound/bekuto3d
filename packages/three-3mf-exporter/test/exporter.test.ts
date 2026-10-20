@@ -153,4 +153,51 @@ describe('three-3mf-exporter', () => {
     expect(modelXml).toContain('<item objectid="4"')
     expect(modelXml).toContain('<item objectid="5"')
   })
+
+  describe('project settings flush volumes', () => {
+    async function getProjectSettings(object: THREE.Object3D, config?: Parameters<typeof exportTo3MF>[1]) {
+      const zip = await getZip(await exportTo3MF(object, config))
+      return JSON.parse(await zip.file('Metadata/project_settings.config')!.async('string'))
+    }
+
+    function twoColorGroup() {
+      const group = new THREE.Group()
+      group.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial({ color: 0xFF0000 })))
+      group.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial({ color: 0x0000FF })))
+      return group
+    }
+
+    it('writes a flush volumes matrix computed from the filament colors', async () => {
+      const settings = await getProjectSettings(twoColorGroup())
+      expect(settings.filament_colour).toEqual(['#ff0000', '#0000ff'])
+      expect(settings.flush_volumes_matrix).toEqual(['0', '329', '485', '0'])
+      expect(settings).not.toHaveProperty('flush_multiplier')
+    })
+
+    it('sizes the matrix to the padded filament list', async () => {
+      const mesh = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial({ color: 0xFF0000 }))
+      const settings = await getProjectSettings(mesh)
+      expect(settings.filament_colour).toEqual(['#ff0000', '#FFFFFF'])
+      expect(settings.flush_volumes_matrix).toEqual(['0', '678', '354', '0'])
+    })
+
+    it('uses the configured nozzle volume as the minimum purge', async () => {
+      const settings = await getProjectSettings(twoColorGroup(), { nozzleVolume: 107 })
+      expect(settings.flush_volumes_matrix).toEqual(['0', '344', '500', '0'])
+    })
+
+    it('ignores an override matrix whose size does not match the filament count', async () => {
+      const settings = await getProjectSettings(twoColorGroup(), { flush_volumes_matrix: [0, 100, 200] })
+      expect(settings.flush_volumes_matrix).toEqual(['0', '329', '485', '0'])
+    })
+
+    it('lets the user override the matrix and multiplier', async () => {
+      const settings = await getProjectSettings(twoColorGroup(), {
+        flush_volumes_matrix: [0, 100, 200, 0],
+        flush_multiplier: 0.8,
+      })
+      expect(settings.flush_volumes_matrix).toEqual(['0', '100', '200', '0'])
+      expect(settings.flush_multiplier).toEqual(['0.8'])
+    })
+  })
 })
