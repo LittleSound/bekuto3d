@@ -52,7 +52,7 @@
     "three": "*"
   },
   "dependencies": {
-    "fast-xml-parser": "^5.0.9",
-    "jszip": "^3.10.1"
+    "fast-xml-parser": "^5.11.2",
+    "jszip": "^3.10.2"
   }
 }

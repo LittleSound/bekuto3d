@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import type { TresPointerEvent } from '@tresjs/core'
 import type { Group } from 'three'
 import type { ShapeWithColor } from '~/types/three-types'
 import { OrbitControls } from '@tresjs/cientos'
@@ -46,7 +47,7 @@ const emit = defineEmits<{
   (e: 'update:modelSize', size: ModelSize): void
   (e: 'update:modelOffset', offset: ModelOffset): void
   (e: 'modelLoaded'): void
-  (e: 'meshClick', index: number, event: PointerEvent): void
+  (e: 'meshClick', index: number, event: TresPointerEvent): void
   (e: 'pointerMissed'): void
 }>()
 
@@ -188,17 +189,17 @@ function calculateModelSize() {
   })
 }
 
-function addHoverModel(index: number, event: PointerEvent) {
+function addHoverModel(index: number, event: TresPointerEvent) {
   hoverShapeIndex.value = index
   event.stopPropagation()
 }
 
-function removeHoverModel(_: number, event: PointerEvent) {
+function removeHoverModel(_: number, event: TresPointerEvent) {
   hoverShapeIndex.value = null
   event.stopPropagation()
 }
 
-function handleMeshClick(index: number, event: PointerEvent) {
+function handleMeshClick(index: number, event: TresPointerEvent) {
   emit('meshClick', index, event)
   event.stopPropagation()
 }
@@ -210,7 +211,7 @@ defineExpose({
 </script>
 
 <template>
-  <TresCanvas window-size :clear-color="isDark ? '#437568' : '#82DBC5'" :logarithmic-depth-buffer="true" @pointer-missed="emit('pointerMissed')">
+  <TresCanvas window-size :clear-color="isDark ? '#437568' : '#82DBC5'" :logarithmic-depth-buffer="true" @pointermissed="emit('pointerMissed')">
     <TresPerspectiveCamera
       :position="cameraPosition"
       :look-at="[0, 0, 0]"
@@ -226,9 +227,9 @@ defineExpose({
         :key="index"
         :position="[modelOffset.x, modelOffset.y, modelOffset.z + item.startZ]"
         :render-order="index + 1"
-        @pointer-enter="addHoverModel(index, $event as unknown as PointerEvent)"
-        @pointer-leave="removeHoverModel(index, $event as unknown as PointerEvent)"
-        @click="handleMeshClick(index, $event as unknown as PointerEvent)"
+        @pointerenter="addHoverModel(index, $event)"
+        @pointerleave="removeHoverModel(index, $event)"
+        @click="handleMeshClick(index, $event)"
       >
         <TresExtrudeGeometry
           :args="[item.shape, {

@@ -1,2 +1,20 @@
+minimumReleaseAgeExcludePrune: true
+trustPolicy: no-downgrade
+
+peerDependencyRules:
+  allowedVersions:
+    # unbuild@3 declares typescript ^5.9; declaration builds work fine with TS 6
+    unbuild>typescript: '6'
+
+shellEmulator: true
+
 packages:
   - 'packages/*'
+
+overrides:
+  # oxfmt@0.35 (via eslint-plugin-format) pins a vulnerable tinypool (GHSA advisories, fixed in 2.1.2)
+  tinypool: ^2.2.0
+
+allowBuilds:
+  esbuild: true
+  simple-git-hooks: true

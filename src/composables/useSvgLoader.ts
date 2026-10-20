@@ -85,11 +85,12 @@ export function useSvgLoader() {
     svgParsed.paths.forEach((path) => {
       // 处理填充形状
       if (drawFillShapes) {
-        const fillColor = path.userData?.style?.fill || defaultColor
-        const fillOpacity = path.userData?.style?.fillOpacity ?? 1
+        const style = path.userData?.style as { fill?: string, fillOpacity?: number } | undefined
+        const fillColor = style?.fill || defaultColor
+        const fillOpacity = style?.fillOpacity ?? 1
 
         if (fillColor !== undefined && fillColor !== 'none') {
-          const pathShapes = SVGLoader.createShapes(path)
+          const pathShapes = path.toShapes()
           pathShapes.forEach((shape) => {
             shapes.push({
               shape: markRaw(shape),
