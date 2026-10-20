@@ -79,6 +79,43 @@ describe('3MF output compatibility', () => {
     expect(model).toContain('<triangle v1="0" v2="1" v3="2" /> <triangle v1="0" v2="2" v3="3" />')
   })
 
+  it('de-duplicates a large triangle soup with mostly unique vertices like the reference implementation', async () => {
+    // Enough unique vertices to force several storage and hash table growths.
+    const corners = 3 * 20_000
+    const source = new Float32Array(corners * 3)
+    for (let c = 0; c < corners; c++) {
+      for (let k = 0; k < 3; k++) {
+        const i = c * 3 + k
+        // Every 5th corner repeats an earlier vertex, the rest are pseudo-random.
+        source[i] = c % 5 === 4 ? source[i - 12] : Math.sin(i * 12.9898) * 437.5453
+      }
+    }
+    const geometry = new BufferGeometry()
+    geometry.setAttribute('position', new BufferAttribute(source, 3))
+
+    const model = (await exportFiles(new Mesh(geometry)))['3D/3dmodel.model']
+
+    const expectedIds = new Map<string, number>()
+    const expectedVertices: string[] = []
+    const expectedTriangles: number[] = []
+    for (let c = 0; c < corners; c++) {
+      const [x, y, z] = source.subarray(c * 3, c * 3 + 3)
+      const key = `${x},${y},${z}`
+      if (!expectedIds.has(key)) {
+        expectedIds.set(key, expectedVertices.length)
+        expectedVertices.push(`<vertex x="${x.toFixed(5)}" y="${y.toFixed(5)}" z="${z.toFixed(5)}" />`)
+      }
+      expectedTriangles.push(expectedIds.get(key)!)
+    }
+    const triangles: string[] = []
+    for (let t = 0; t < expectedTriangles.length; t += 3)
+      triangles.push(`<triangle v1="${expectedTriangles[t]}" v2="${expectedTriangles[t + 1]}" v3="${expectedTriangles[t + 2]}" />`)
+
+    expect(expectedVertices.length).toBeGreaterThan(corners / 2)
+    expect(expectedVertices.length).toBeLessThan(corners)
+    expect(model).toContain(`<mesh><vertices>${expectedVertices.join(' ')}</vertices><triangles>${triangles.join(' ')}</triangles></mesh>`)
+  })
+
   it('exports an uncompressed archive with identical model content', async () => {
     const mesh = new Mesh(new BoxGeometry(1, 1, 1))
     const deflated = await exportFiles(mesh)

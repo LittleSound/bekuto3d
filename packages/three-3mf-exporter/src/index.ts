@@ -258,9 +258,10 @@ export async function exportTo3MF(
  *
  * Returns UTF-8 bytes instead of a string: the mesh section of a large model can exceed
  * V8's max string length (~512 MiB), see https://github.com/LittleSound/bekuto3d/issues/19.
+ * The output buffer is allocated once from an upper bound of the final size, so the XML is
+ * held in memory only once (untouched tail pages of the over-estimate are never committed).
  */
 function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[], shift: { x: number, y: number, z: number }, printConfig: PrintConfig): Uint8Array {
-  const out = createChunkedTextWriter()
   const metadata: string[] = []
   const metadataConfig = printConfig.metadata
   metadata.push(`<metadata name="CreationDate">${new Date().toISOString()}</metadata>`)
@@ -268,33 +269,22 @@ function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[]
     metadata.push(`<metadata name="${key}">${(metadataConfig as Record<string, unknown>)[key]}</metadata>`)
   }
 
-  out.write(`<?xml version="1.0" encoding="UTF-8"?>
+  const header = `<?xml version="1.0" encoding="UTF-8"?>
 <model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" requiredextensions="p">
     ${metadata.join('\n    ')}
     <resources>
-`)
+`
 
-  components.forEach((c, index) => {
-    if (index > 0)
-      out.write('\n')
+  const objectXml = components.map((c) => {
     if (c.type === 'assembly') {
       const comps = c.subComponents.map((sc) => {
         const e = sc.transform.elements
         const tStr = `${e[0].toFixed(5)} ${e[1].toFixed(5)} ${e[2].toFixed(5)} ${e[4].toFixed(5)} ${e[5].toFixed(5)} ${e[6].toFixed(5)} ${e[8].toFixed(5)} ${e[9].toFixed(5)} ${e[10].toFixed(5)} ${e[12].toFixed(5)} ${e[13].toFixed(5)} ${e[14].toFixed(5)}`
         return `<component objectid="${sc.objectId}" transform="${tStr}" />`
       }).join('')
-      out.write(`<object id="${c.id}" type="model" name="${c.name}"><components>${comps}</components></object>`)
+      return `<object id="${c.id}" type="model" name="${c.name}"><components>${comps}</components></object>`
     }
-    else {
-      const { positions: p, indices: t } = c
-      out.write(`<object id="${c.id}" type="model" name="${c.name}"><mesh><vertices>`)
-      for (let i = 0; i < p.length; i += 3)
-        out.write(`${i > 0 ? ' ' : ''}<vertex x="${p[i].toFixed(5)}" y="${p[i + 1].toFixed(5)}" z="${p[i + 2].toFixed(5)}" />`)
-      out.write('</vertices><triangles>')
-      for (let i = 0; i < t.length; i += 3)
-        out.write(`${i > 0 ? ' ' : ''}<triangle v1="${t[i]}" v2="${t[i + 1]}" v3="${t[i + 2]}" />`)
-      out.write('</triangles></mesh></object>')
-    }
+    return `<object id="${c.id}" type="model" name="${c.name}"><mesh><vertices>`
   })
 
   const build = buildItems.map((item) => {
@@ -309,13 +299,60 @@ function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[]
     return `<item objectid="${item.objectId}" transform="${tStr}" printable="1" />`
   }).join('\n')
 
-  out.write(`
+  const footer = `
     </resources>
     <build>
 ${build}
     </build>
-</model>`)
+</model>`
+
+  let capacity = 3 * (header.length + footer.length + components.length)
+  objectXml.forEach(s => capacity += 3 * s.length)
+  components.forEach(c => capacity += meshXmlByteBound(c))
+
+  const out = createUtf8Writer(capacity)
+  out.write(header)
+  components.forEach((c, index) => {
+    if (index > 0)
+      out.write('\n')
+    out.write(objectXml[index])
+    if (c.type === 'mesh') {
+      const { positions: p, indices: t } = c
+      for (let i = 0; i < p.length; i += 3)
+        out.write(`${i > 0 ? ' ' : ''}<vertex x="${p[i].toFixed(5)}" y="${p[i + 1].toFixed(5)}" z="${p[i + 2].toFixed(5)}" />`)
+      out.write('</vertices><triangles>')
+      for (let i = 0; i < t.length; i += 3)
+        out.write(`${i > 0 ? ' ' : ''}<triangle v1="${t[i]}" v2="${t[i + 1]}" v3="${t[i + 2]}" />`)
+      out.write('</triangles></mesh></object>')
+    }
+  })
+  out.write(footer)
   return out.toUint8Array()
+}
+
+/**
+ * Upper bound of the UTF-8 bytes `createMainModelXML` writes for a mesh's vertices and
+ * triangles (the part after `<vertices>`). Mesh markup is pure ASCII, so bytes equal characters.
+ */
+function meshXmlByteBound(c: ComponentInfo): number {
+  if (c.type !== 'mesh')
+    return 0
+  const digits = (n: number) => {
+    let d = 1
+    for (let p = 10; p <= n; p *= 10)
+      d++
+    return d
+  }
+  /** Length of `v.toFixed(5)`, possibly overestimated by one when rounding does not carry. */
+  const fixed5Length = (v: number) => Math.abs(v) < 1e21
+    ? (v < 0 ? 7 : 6) + digits(Math.floor(Math.abs(v)) + 1)
+    : v.toFixed(5).length
+  const { positions: p, indices: t } = c
+  // `<vertex x="" y="" z="" />` + separator, `<triangle v1="" v2="" v3="" />` + separator.
+  let bytes = 64 + (p.length / 3) * 26 + (t.length / 3) * (31 + 3 * digits(Math.max(p.length / 3 - 1, 0)))
+  for (let i = 0; i < p.length; i++)
+    bytes += fixed5Length(p[i])
+  return bytes
 }
 
 /**
@@ -326,24 +363,40 @@ ${build}
  * An open-addressing hash table over typed arrays replaces the `Map` with string keys:
  * it is faster, far smaller, and not capped at 2^24 entries like a `Map`.
  * A trailing partial triangle (count not divisible by 3) is ignored.
+ *
+ * Storage starts from an estimate of the unique vertex count (a triangle soup such as STLLoader
+ * output shares each vertex ~6 times) and doubles on demand; the hash table is rehashed to stay
+ * at most half full. The returned `positions` is a view into a buffer that may be up to 2x larger.
  */
 function collectMeshData(positionAttr: BufferAttribute | InterleavedBufferAttribute, indexAttr: BufferAttribute | null): { positions: Float64Array, indices: Uint32Array } {
   const cornerCount = Math.floor((indexAttr ? indexAttr.count : positionAttr.count) / 3) * 3
   const indices = new Uint32Array(cornerCount)
   const maxVertices = Math.min(cornerCount, positionAttr.count)
-  const positions = new Float64Array(maxVertices * 3)
+  let capacity = Math.min(maxVertices, Math.max(16, indexAttr ? positionAttr.count : Math.ceil(cornerCount / 6)))
+  let positions = new Float64Array(capacity * 3)
 
   let tableSize = 16
-  while (tableSize < maxVertices * 2)
+  while (tableSize < capacity * 2)
     tableSize *= 2
-  const mask = tableSize - 1
+  let mask = tableSize - 1
   // Each slot holds `vertex id + 1`; 0 marks an empty slot.
-  const table = new Uint32Array(tableSize)
+  let table = new Uint32Array(tableSize)
 
   const scratch = new Float64Array(3)
   const words = new Uint32Array(scratch.buffer)
   const canonical = (n: number) => n === 0 ? 0 : Number.isNaN(n) ? Number.NaN : n
   const same = (a: number, b: number) => a === b || (Number.isNaN(a) && Number.isNaN(b))
+  /** Hashes the coordinates currently in `scratch` to a starting slot. */
+  const hashSlot = () => {
+    let h = 0x9E3779B9
+    for (let w = 0; w < 6; w++) {
+      h = Math.imul(h ^ words[w], 0x85EBCA6B)
+      h ^= h >>> 13
+    }
+    h = Math.imul(h ^ (h >>> 16), 0xC2B2AE35)
+    h ^= h >>> 16
+    return (h & mask) >>> 0
+  }
   let vertexCount = 0
 
   for (let corner = 0; corner < cornerCount; corner++) {
@@ -352,15 +405,7 @@ function collectMeshData(positionAttr: BufferAttribute | InterleavedBufferAttrib
     const y = scratch[1] = canonical(positionAttr.getY(source))
     const z = scratch[2] = canonical(positionAttr.getZ(source))
 
-    let h = 0x9E3779B9
-    for (let w = 0; w < 6; w++) {
-      h = Math.imul(h ^ words[w], 0x85EBCA6B)
-      h ^= h >>> 13
-    }
-    h = Math.imul(h ^ (h >>> 16), 0xC2B2AE35)
-    h ^= h >>> 16
-
-    let slot = h & mask
+    let slot = hashSlot()
     let id = -1
     while (table[slot] !== 0) {
       const o = (table[slot] - 1) * 3
@@ -368,19 +413,38 @@ function collectMeshData(positionAttr: BufferAttribute | InterleavedBufferAttrib
         id = table[slot] - 1
         break
       }
-      slot = (slot + 1) & mask
+      slot = ((slot + 1) & mask) >>> 0
     }
     if (id === -1) {
       id = vertexCount++
       table[slot] = id + 1
+      if (id === capacity) {
+        capacity = Math.min(maxVertices, capacity * 2)
+        const grown = new Float64Array(capacity * 3)
+        grown.set(positions)
+        positions = grown
+      }
       positions[id * 3] = x
       positions[id * 3 + 1] = y
       positions[id * 3 + 2] = z
+
+      if (vertexCount * 2 > tableSize) {
+        tableSize *= 2
+        mask = tableSize - 1
+        table = new Uint32Array(tableSize)
+        for (let v = 0; v < vertexCount; v++) {
+          scratch.set(positions.subarray(v * 3, v * 3 + 3))
+          let s = hashSlot()
+          while (table[s] !== 0)
+            s = ((s + 1) & mask) >>> 0
+          table[s] = v + 1
+        }
+      }
     }
     indices[corner] = id
   }
 
-  return { positions: positions.slice(0, vertexCount * 3), indices }
+  return { positions: positions.subarray(0, vertexCount * 3), indices }
 }
 
 /**
@@ -417,38 +481,37 @@ function createBoundsAccumulator() {
 }
 
 /**
- * Collects text and UTF-8 encodes it in ~1M character chunks, so documents larger than
- * V8's max string length can be produced. `toUint8Array` concatenates and releases the chunks.
+ * Accumulates text and UTF-8 encodes it in ~64K character batches directly into one buffer,
+ * so documents larger than V8's max string length can be produced without holding them twice.
+ * `capacity` (bytes) should be an upper bound; the buffer grows if it turns out too small.
+ * `toUint8Array` returns a view of the written bytes, not a copy.
  */
-function createChunkedTextWriter() {
+function createUtf8Writer(capacity: number) {
   const encoder = new TextEncoder()
-  const chunks: Uint8Array[] = []
-  let pending = ''
+  let buffer = new Uint8Array(capacity)
   let byteLength = 0
+  let pending = ''
   const flush = () => {
-    if (!pending)
-      return
-    const chunk = encoder.encode(pending)
-    chunks.push(chunk)
-    byteLength += chunk.byteLength
-    pending = ''
+    while (pending) {
+      const { read, written } = encoder.encodeInto(pending, buffer.subarray(byteLength))
+      byteLength += written
+      pending = pending.slice(read)
+      if (pending) {
+        const grown = new Uint8Array(Math.ceil(Math.max(buffer.length * 1.5, byteLength + pending.length * 3)))
+        grown.set(buffer.subarray(0, byteLength))
+        buffer = grown
+      }
+    }
   }
   return {
     write(text: string) {
       pending += text
-      if (pending.length >= 1 << 20)
+      if (pending.length >= 1 << 16)
         flush()
     },
     toUint8Array(): Uint8Array {
       flush()
-      const result = new Uint8Array(byteLength)
-      let offset = 0
-      for (const chunk of chunks) {
-        result.set(chunk, offset)
-        offset += chunk.byteLength
-      }
-      chunks.length = 0
-      return result
+      return buffer.subarray(0, byteLength)
     },
   }
 }
