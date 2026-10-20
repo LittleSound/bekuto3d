@@ -9,6 +9,9 @@ import IconInput from './IconInput.vue'
 import ModelExporter from './ModelExporter.vue'
 import ModelRenderer from './ModelRenderer.vue'
 
+/** Modifier key state shared by DOM mouse events and TresJS pointer events */
+type ModifierKeys = Pick<MouseEvent, 'ctrlKey' | 'metaKey' | 'shiftKey'>
+
 // 默认值
 const defaultDepth = 2
 const defaultSize = 37
@@ -142,7 +145,6 @@ async function convertBitmapToSvg(file: File) {
 
   return new Promise<string>((resolve, reject) => {
     file.arrayBuffer().then((buffer) => {
-      // eslint-disable-next-line node/prefer-global/buffer
       potrace.trace(Buffer.from(buffer), (_: any, svg: string) => {
         const svgWidth = imageWidth + padding * 2
         const svgHeight = imageHeight + padding * 2
@@ -244,7 +246,7 @@ const hoverShownShapeIndex = computed({
  * - Ctrl/Cmd + click: toggle selection
  * - Shift + click: range select from lastSelectedIndex
  */
-function toggleSelection(index: number, event?: MouseEvent | PointerEvent) {
+function toggleSelection(index: number, event?: ModifierKeys) {
   if (isDefaultSvg.value || isExporting.value)
     return
 
@@ -274,7 +276,7 @@ function toggleSelection(index: number, event?: MouseEvent | PointerEvent) {
 }
 
 /** Selects the item and focuses its input. Used when clicking list items or canvas models. */
-function selectAndFocus(index: number, event?: MouseEvent | PointerEvent) {
+function selectAndFocus(index: number, event?: ModifierKeys) {
   toggleSelection(index, event)
   focusToInput(index)
 }
@@ -329,7 +331,7 @@ function handleInputAreaClick(index: number, event: MouseEvent) {
 }
 
 /** Handles 3D mesh click - converts index and triggers selection with focus */
-function handleMeshClick(index: number, event: PointerEvent) {
+function handleMeshClick(index: number, event: ModifierKeys) {
   if (isDefaultSvg.value || isExporting.value)
     return
   selectAndFocus(toSvgIndex(index), event)

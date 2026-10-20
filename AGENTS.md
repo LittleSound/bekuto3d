@@ -1,16 +1,30 @@
-This project is an AI SDK, similar to the Vercel AI SDK.
+Bekuto 3D is a web app that converts SVG files into 3D models (each shape gets its own depth, Z offset, and color) and exports them as STL, binary glTF, or 3MF for 3D printing and web 3D. Built with Vue 3 + Vite + TresJS (three.js) + UnoCSS. Deployed to Netlify (`netlify.toml`) and Cloudflare (`wrangler.toml`), both serving `dist/`.
+
+It also publishes [`three-3mf-exporter`](./packages/three-3mf-exporter), a three.js 3MF exporter; the app imports it from source via a Vite/tsconfig alias.
 
 ### directory
 
-- packages/
-  - core/ # Core SDK package
-    - src/providers/ # AI providers implementations
-  - demo/ # Demo applications using the SDK
-- docs/ # Documentation site
+- src/
+  - main.ts, App.vue # App entry
+  - pages/ # File-based routes (unplugin-vue-router), main page: index.vue
+  - components/ # Auto-registered components, e.g. SvgTo3D.vue (main UI), ModelRenderer.vue, ModelExporter.vue
+  - composables/ # useSvgLoader.ts (SVG parsing to shapes), useModelSize.ts, dark.ts
+- packages/three-3mf-exporter/ # Published 3MF exporter (src/index.ts, test/, built with unbuild)
+- test/ # App unit tests (vitest)
+- notes/ # Design documents
+- .github/workflows/test.yml # CI: build, test, lint, typecheck on ubuntu + windows
+
+### commands
+
+- `nr dev` - Dev server on port 3333
+- `nr build` - Build the app to `dist/`
+- `nr packages:build` - Build packages under `packages/`
+- `nr test` - Run vitest
+- `nr lint` / `nr typecheck` - ESLint (also formats markdown) / vue-tsc
 
 ## Research, Design, Implement - Three-Step Workflow
 
-Design documents are stored in [/notes](/notes)
+Design documents are stored in [notes/](./notes)
 
 When you receive a requirement, first check if related design documents exist. If so, read them first.
 If not, create corresponding design documents with appropriate folder organization.
