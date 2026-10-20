@@ -283,7 +283,7 @@ function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[]
   const metadataConfig = printConfig.metadata
   metadata.push(`<metadata name="CreationDate">${new Date().toISOString()}</metadata>`)
   for (const key in metadataConfig) {
-    metadata.push(`<metadata name="${key}">${(metadataConfig as Record<string, unknown>)[key]}</metadata>`)
+    metadata.push(`<metadata name="${escapeXml(key)}">${escapeXml((metadataConfig as Record<string, unknown>)[key])}</metadata>`)
   }
 
   const header = `<?xml version="1.0" encoding="UTF-8"?>
@@ -299,9 +299,9 @@ function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[]
         const tStr = `${e[0].toFixed(5)} ${e[1].toFixed(5)} ${e[2].toFixed(5)} ${e[4].toFixed(5)} ${e[5].toFixed(5)} ${e[6].toFixed(5)} ${e[8].toFixed(5)} ${e[9].toFixed(5)} ${e[10].toFixed(5)} ${e[12].toFixed(5)} ${e[13].toFixed(5)} ${e[14].toFixed(5)}`
         return `<component objectid="${sc.objectId}" transform="${tStr}" />`
       }).join('')
-      return `<object id="${c.id}" type="model" name="${c.name}"><components>${comps}</components></object>`
+      return `<object id="${c.id}" type="model" name="${escapeXml(c.name)}"><components>${comps}</components></object>`
     }
-    return `<object id="${c.id}" type="model" name="${c.name}"><mesh><vertices>`
+    return `<object id="${c.id}" type="model" name="${escapeXml(c.name)}"><mesh><vertices>`
   })
 
   const build = buildItems.map((item) => {
@@ -557,14 +557,14 @@ function createModelSettingsXML(components: ComponentInfo[], buildItems: BuildIt
     const partsXml = parts.map((p) => {
       const extruder = p.material ? p.material.extruder : 1
       return `    <part id="${p.id}" subtype="normal_part">
-      <metadata key="name" value="${p.name}"/>
+      <metadata key="name" value="${escapeXml(p.name)}"/>
       <metadata key="extruder" value="${extruder}"/>
       <mesh_stat edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/>
     </part>`
     }).join('\n')
 
     objectsXml += `  <object id="${objId}">
-    <metadata key="name" value="${comp.name}"/>
+    <metadata key="name" value="${escapeXml(comp.name)}"/>
     <metadata key="extruder" value="1"/>
     <metadata key="thumbnail_file" value=""/>
 ${partsXml}
@@ -674,6 +674,21 @@ function contentTypesXML(): string {
   <Default Extension="png" ContentType="image/png" />
   <Default Extension="gcode" ContentType="text/x.gcode"/>
 </Types>`
+}
+
+const XML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&apos;', '\t': '&#9;', '\n': '&#10;', '\r': '&#13;' }
+
+/**
+ * Makes a user-provided value safe for both XML text content and attribute values.
+ * Characters XML 1.0 forbids (C0 controls other than tab/LF/CR, lone surrogates, U+FFFE/U+FFFF)
+ * cannot be escaped, so they are dropped. Tab/LF/CR become character references because
+ * parsers would otherwise normalize them to spaces in attributes.
+ */
+function escapeXml(value: unknown): string {
+  return String(value)
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\0-\x08\v\f\x0E-\x1F\uFFFE\uFFFF\p{Cs}]/gu, '')
+    .replace(/[&<>"'\t\n\r]/g, c => XML_ESCAPES[c])
 }
 
 /**
