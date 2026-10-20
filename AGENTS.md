@@ -6,7 +6,7 @@ It also publishes [`three-3mf-exporter`](./packages/three-3mf-exporter), a three
 
 - src/
   - main.ts, App.vue # App entry
-  - pages/ # File-based routes (unplugin-vue-router), main page: index.vue
+  - pages/ # File-based routes (vue-router 5 built-in `vue-router/vite` plugin), main page: index.vue
   - components/ # Auto-registered components, e.g. SvgTo3D.vue (main UI), ModelRenderer.vue, ModelExporter.vue
   - composables/ # useSvgLoader.ts (SVG parsing to shapes), useModelSize.ts, dark.ts
 - packages/three-3mf-exporter/ # Published 3MF exporter (src/index.ts, test/, built with unbuild)
@@ -15,6 +15,8 @@ It also publishes [`three-3mf-exporter`](./packages/three-3mf-exporter), a three
 - .github/workflows/test.yml # CI: build, test, lint, typecheck on ubuntu + windows
 
 ### commands
+
+Requires Node `^22.22.2 || ^24.15.0 || >=26.0.0` and pnpm 12 (see `engines` / `packageManager` in package.json).
 
 - `nr dev` - Dev server on port 3333
 - `nr build` - Build the app to `dist/`
