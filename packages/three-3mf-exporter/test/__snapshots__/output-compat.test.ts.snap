@@ -1,0 +1,87 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`3MF output compatibility > keeps the exact XML layout for a scene with meshes, assemblies and transforms 1`] = `
+{
+  "3D/3dmodel.model": "<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" requiredextensions="p">
+    <metadata name="CreationDate">DATE</metadata>
+    <metadata name="Application">BambuStudio-02.04.00.70</metadata>
+    <metadata name="ApplicationTitle">Exported 3D Model</metadata>
+    <resources>
+<object id="1" type="model" name="Indexed"><mesh><vertices><vertex x="0.50000" y="1.00000" z="1.50000" /> <vertex x="0.50000" y="-1.00000" z="1.50000" /> <vertex x="0.50000" y="1.00000" z="-1.50000" /> <vertex x="0.50000" y="-1.00000" z="-1.50000" /> <vertex x="-0.50000" y="1.00000" z="-1.50000" /> <vertex x="-0.50000" y="-1.00000" z="-1.50000" /> <vertex x="-0.50000" y="1.00000" z="1.50000" /> <vertex x="-0.50000" y="-1.00000" z="1.50000" /></vertices><triangles><triangle v1="0" v2="1" v3="2" /> <triangle v1="1" v2="3" v3="2" /> <triangle v1="4" v2="5" v3="6" /> <triangle v1="5" v2="7" v3="6" /> <triangle v1="4" v2="6" v3="2" /> <triangle v1="6" v2="0" v3="2" /> <triangle v1="7" v2="5" v3="1" /> <triangle v1="5" v2="3" v3="1" /> <triangle v1="6" v2="7" v3="0" /> <triangle v1="7" v2="1" v3="0" /> <triangle v1="2" v2="3" v3="4" /> <triangle v1="3" v2="5" v3="4" /></triangles></mesh></object>
+<object id="2" type="model" name="NonIndexed"><mesh><vertices><vertex x="0.50000" y="0.50000" z="0.50000" /> <vertex x="0.50000" y="-0.50000" z="0.50000" /> <vertex x="0.50000" y="0.50000" z="-0.50000" /> <vertex x="0.50000" y="-0.50000" z="-0.50000" /> <vertex x="-0.50000" y="0.50000" z="-0.50000" /> <vertex x="-0.50000" y="-0.50000" z="-0.50000" /> <vertex x="-0.50000" y="0.50000" z="0.50000" /> <vertex x="-0.50000" y="-0.50000" z="0.50000" /></vertices><triangles><triangle v1="0" v2="1" v3="2" /> <triangle v1="1" v2="3" v3="2" /> <triangle v1="4" v2="5" v3="6" /> <triangle v1="5" v2="7" v3="6" /> <triangle v1="4" v2="6" v3="2" /> <triangle v1="6" v2="0" v3="2" /> <triangle v1="7" v2="5" v3="1" /> <triangle v1="5" v2="3" v3="1" /> <triangle v1="6" v2="7" v3="0" /> <triangle v1="7" v2="1" v3="0" /> <triangle v1="2" v2="3" v3="4" /> <triangle v1="3" v2="5" v3="4" /></triangles></mesh></object>
+<object id="3" type="model" name="Mesh-3"><mesh><vertices><vertex x="0.25000" y="0.25000" z="0.25000" /> <vertex x="0.25000" y="-0.25000" z="0.25000" /> <vertex x="0.25000" y="0.25000" z="-0.25000" /> <vertex x="0.25000" y="-0.25000" z="-0.25000" /> <vertex x="-0.25000" y="0.25000" z="-0.25000" /> <vertex x="-0.25000" y="-0.25000" z="-0.25000" /> <vertex x="-0.25000" y="0.25000" z="0.25000" /> <vertex x="-0.25000" y="-0.25000" z="0.25000" /></vertices><triangles><triangle v1="0" v2="1" v3="2" /> <triangle v1="1" v2="3" v3="2" /> <triangle v1="4" v2="5" v3="6" /> <triangle v1="5" v2="7" v3="6" /> <triangle v1="4" v2="6" v3="2" /> <triangle v1="6" v2="0" v3="2" /> <triangle v1="7" v2="5" v3="1" /> <triangle v1="5" v2="3" v3="1" /> <triangle v1="6" v2="7" v3="0" /> <triangle v1="7" v2="1" v3="0" /> <triangle v1="2" v2="3" v3="4" /> <triangle v1="3" v2="5" v3="4" /></triangles></mesh></object>
+<object id="4" type="model" name="Group-4"><components><component objectid="3" transform="1.00000 0.00000 0.00000 0.00000 1.00000 0.00000 0.00000 0.00000 1.00000 0.00000 0.00000 0.00000" /></components></object>
+<object id="5" type="model" name="Assembly"><components><component objectid="2" transform="2.00000 0.00000 0.00000 0.00000 1.00000 0.00000 0.00000 0.00000 1.00000 0.00000 5.00000 0.00000" /><component objectid="4" transform="1.00000 0.00000 0.00000 0.00000 1.00000 0.00000 0.00000 0.00000 1.00000 0.00000 0.00000 7.00000" /></components></object>
+    </resources>
+    <build>
+<item objectid="1" transform="0.93629 0.31299 -0.15935 -0.28963 0.94470 0.15379 0.19867 -0.09784 0.97517 124.10111 125.20088 3.50000" printable="1" />
+<item objectid="5" transform="0.70711 0.70711 0.00000 -0.70711 0.70711 0.00000 0.00000 0.00000 1.00000 132.60111 127.45088 0.50000" printable="1" />
+    </build>
+</model>",
+  "Metadata/model_settings.config": "<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <object id="1">
+    <metadata key="name" value="Indexed"/>
+    <metadata key="extruder" value="1"/>
+    <metadata key="thumbnail_file" value=""/>
+    <part id="1" subtype="normal_part">
+      <metadata key="name" value="Indexed"/>
+      <metadata key="extruder" value="1"/>
+      <mesh_stat edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/>
+    </part>
+  </object>
+  <object id="5">
+    <metadata key="name" value="Assembly"/>
+    <metadata key="extruder" value="1"/>
+    <metadata key="thumbnail_file" value=""/>
+    <part id="2" subtype="normal_part">
+      <metadata key="name" value="NonIndexed"/>
+      <metadata key="extruder" value="2"/>
+      <mesh_stat edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/>
+    </part>
+    <part id="3" subtype="normal_part">
+      <metadata key="name" value="Mesh-3"/>
+      <metadata key="extruder" value="3"/>
+      <mesh_stat edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/>
+    </part>
+  </object>
+
+  <plate>
+    <metadata key="plater_id" value="1"/>
+    <metadata key="plater_name" value="plate-1"/>
+    <model_instance>
+      <metadata key="object_id" value="1"/>
+      <metadata key="instance_id" value="0"/>
+      <metadata key="identify_id" value="1"/>
+    </model_instance>
+    <model_instance>
+      <metadata key="object_id" value="5"/>
+      <metadata key="instance_id" value="0"/>
+      <metadata key="identify_id" value="2"/>
+    </model_instance>
+
+  </plate>
+  <assemble>
+    <assemble_item object_id="1" instance_id="0" offset="0 0 0"/>
+    <assemble_item object_id="5" instance_id="0" offset="0 0 0"/>
+
+  </assemble>
+</config>",
+  "Metadata/project_settings.config": "{"printable_area":["0x0","256x0","256x256","0x256"],"printable_height":"256","bed_exclude_area":[],"filament_colour":["#ff0000","#00ff00","#ffffff"],"filament_settings_id":["Bambu PLA Basic @BBL A1","Bambu PLA Basic @BBL A1","Bambu PLA Basic @BBL A1"],"filament_diameter":["1.75","1.75","1.75"],"filament_is_support":["0","0","0"],"printer_model":"Bambu Lab A1","layer_height":"0.2","wall_loops":"2","sparse_infill_density":"15%","printer_settings_id":"Bambu Lab A1 0.4 nozzle","printer_variant":"0.4","nozzle_diameter":["0.4"],"enable_support":"0","support_type":"normal(auto)","print_settings_id":"0.20mm Standard @BBL A1"}",
+  "[Content_Types].xml": "<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml" />
+  <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />
+  <Default Extension="config" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />
+  <Default Extension="png" ContentType="image/png" />
+  <Default Extension="gcode" ContentType="text/x.gcode"/>
+</Types>",
+  "_rels/.rels": "<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rel-1" Target="/3D/3dmodel.model" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
+  <Relationship Id="rel-2" Target="/Metadata/model_settings.config" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
+  <Relationship Id="rel-3" Target="/Metadata/project_settings.config" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
+</Relationships>",
+}
+`;
