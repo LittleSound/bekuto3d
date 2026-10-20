@@ -42,7 +42,11 @@ interface Rgb { r: number, g: number, b: number }
  * `matrix[from * n + to]` is the volume (mm³) needed to switch from filament `from` to
  * filament `to`, with a zero diagonal. Values are not multiplied by `flush_multiplier`.
  *
- * Colors are `#RRGGBB` hex strings (an optional alpha suffix is ignored).
+ * Colors are hex strings (`#RGB`, `#RGBA`, `#RRGGBB` or `#RRGGBBAA`). Partial alpha is ignored;
+ * fully transparent and unparseable colors are treated as white.
+ *
+ * Only single-nozzle printers are covered: multi-nozzle printers (e.g. H2D) store one
+ * `n * n` block per nozzle, which this function does not produce.
  */
 export function computeFlushVolumesMatrix(colors: readonly string[], options: FlushVolumeOptions = {}): number[] {
   const nozzleVolume = options.nozzleVolume ?? DEFAULT_NOZZLE_VOLUME
@@ -88,13 +92,23 @@ function colorFlushVolume(from: Rgb, to: Rgb): number {
   return Math.max(volume, MIN_COLOR_FLUSH)
 }
 
+const WHITE: Rgb = { r: 1, g: 1, b: 1 }
+
+/**
+ * Parse `#RGB`, `#RGBA`, `#RRGGBB` or `#RRGGBBAA` into [0, 1] channels.
+ * Fully transparent colors become white (Bambu Studio treats them that way), and so does
+ * anything unparseable, so the matrix never contains NaN.
+ */
 function parseHexColor(hex: string): Rgb {
-  const value = hex.replace(/^#/, '')
-  return {
-    r: f32(Number.parseInt(value.slice(0, 2), 16) / 255),
-    g: f32(Number.parseInt(value.slice(2, 4), 16) / 255),
-    b: f32(Number.parseInt(value.slice(4, 6), 16) / 255),
-  }
+  let value = hex.trim().replace(/^#/, '')
+  if (!/^(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i.test(value))
+    return WHITE
+  if (value.length <= 4)
+    value = [...value].map(c => c + c).join('')
+  if (value.length === 8 && value.slice(6) === '00')
+    return WHITE
+  const channel = (offset: number) => f32(Number.parseInt(value.slice(offset, offset + 2), 16) / 255)
+  return { r: channel(0), g: channel(2), b: channel(4) }
 }
 
 /** Perceived brightness with the classic 30/59/11 channel weights. */

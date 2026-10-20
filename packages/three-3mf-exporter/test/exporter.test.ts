@@ -186,6 +186,11 @@ describe('three-3mf-exporter', () => {
       expect(settings.flush_volumes_matrix).toEqual(['0', '344', '500', '0'])
     })
 
+    it('ignores an override matrix whose size does not match the filament count', async () => {
+      const settings = await getProjectSettings(twoColorGroup(), { flush_volumes_matrix: [0, 100, 200] })
+      expect(settings.flush_volumes_matrix).toEqual(['0', '329', '485', '0'])
+    })
+
     it('lets the user override the matrix and multiplier', async () => {
       const settings = await getProjectSettings(twoColorGroup(), {
         flush_volumes_matrix: [0, 100, 200, 0],

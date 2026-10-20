@@ -47,4 +47,22 @@ describe('computeFlushVolumesMatrix', () => {
     const [, volume] = computeFlushVolumesMatrix(['#000000', '#FFFFFF'], { nozzleVolume: 500 })
     expect(volume).toBe(900)
   })
+
+  it('expands short #RGB / #RGBA hex colors', () => {
+    expect(computeFlushVolumesMatrix(['#F00', '#00F'])).toEqual([0, 329, 485, 0])
+    expect(computeFlushVolumesMatrix(['#F00F', '#00FF'])).toEqual([0, 329, 485, 0])
+  })
+
+  it('treats fully transparent colors as white, like Bambu Studio', () => {
+    expect(computeFlushVolumesMatrix(['#00000000', '#000000'])).toEqual(computeFlushVolumesMatrix(['#FFFFFF', '#000000']))
+    expect(computeFlushVolumesMatrix(['#F000', '#000'])).toEqual(computeFlushVolumesMatrix(['#FFFFFF', '#000000']))
+    expect(computeFlushVolumesMatrix(['#FF000080', '#0000FF'])).toEqual([0, 329, 485, 0])
+  })
+
+  it('falls back to white for unparseable colors instead of emitting NaN', () => {
+    const white = computeFlushVolumesMatrix(['#FFFFFF', '#000000'])
+    for (const invalid of ['', 'red', '#12', '#GGGGGG', '#12345']) {
+      expect(computeFlushVolumesMatrix([invalid, '#000000']), invalid).toEqual(white)
+    }
+  })
 })

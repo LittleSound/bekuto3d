@@ -49,7 +49,9 @@ interface PrintConfig {
   different_settings_to_system?: string[]
   /**
    * 换料冲刷体积矩阵 / Flushing volumes matrix (mm³), flattened row-major `n * n` (from -> to).
-   * 默认根据耗材颜色计算 / Computed from filament colors by default.
+   * 默认根据耗材颜色计算 / Computed from filament colors by default (single-nozzle printers only).
+   * `n` is the number of exported filaments; single-material exports are padded to 2 filaments,
+   * so the matrix then needs 4 entries. A matrix of any other length is ignored.
    */
   flush_volumes_matrix?: number[]
   /** 冲刷体积倍率 / Flush multiplier. Not written unless set, so the slicer default applies. */
@@ -467,8 +469,11 @@ function createProjectSettingsConfig(materials: MaterialInfo[], printConfig: Pri
     support_type: 'normal(auto)',
     print_settings_id: printConfig.printSettingsId,
     // Without this key Bambu Studio falls back to 280 mm³ for every color change.
-    flush_volumes_matrix: (printConfig.flush_volumes_matrix ?? computeFlushVolumesMatrix(colors, { nozzleVolume: printConfig.nozzleVolume }))
-      .map(String),
+    // A wrongly sized matrix would be discarded by Bambu Studio (back to 280), so compute one instead.
+    flush_volumes_matrix: (printConfig.flush_volumes_matrix?.length === colors.length ** 2
+      ? printConfig.flush_volumes_matrix
+      : computeFlushVolumesMatrix(colors, { nozzleVolume: printConfig.nozzleVolume })
+    ).map(String),
   }
 
   if (printConfig.flush_multiplier !== undefined) {

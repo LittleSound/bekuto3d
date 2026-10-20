@@ -80,6 +80,8 @@ const blob = await exportTo3MF(meshOrGroup, {
   flush_multiplier: 0.8,
 
   // Optional: provide your own matrix (mm³, row-major n * n, from -> to) instead.
+  // n is the number of exported filaments; single-material exports are padded to 2,
+  // so they need 4 entries. A matrix with the wrong length is ignored.
   // flush_volumes_matrix: [0, 300, 450, 0],
 })
 ```
@@ -92,7 +94,7 @@ import { computeFlushVolumesMatrix } from 'three-3mf-exporter'
 computeFlushVolumesMatrix(['#FF0000', '#0000FF']) // [0, 329, 485, 0]
 ```
 
-Bambu Studio additionally uses measured values for some Bambu Lab palette colors, filament pairs and support materials; those are not reproduced, so a few entries may differ from what the slicer shows after "Recalculate".
+Bambu Studio additionally uses measured values for some Bambu Lab palette colors, filament pairs and support materials; those are not reproduced, so a few entries may differ from what the slicer shows after "Recalculate". The computed matrix covers single-nozzle printers only (multi-nozzle printers such as the H2D store one block per nozzle). Colors may be `#RGB`, `#RGBA`, `#RRGGBB` or `#RRGGBBAA`; fully transparent or unparseable colors are treated as white.
 
 ## Sponsors
 
