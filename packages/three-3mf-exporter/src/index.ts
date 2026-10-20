@@ -1,6 +1,9 @@
 import type { Group, Matrix4, Mesh, MeshPhongMaterial, Object3D } from 'three'
 import JSZip from 'jszip'
 import { Color, Vector3 } from 'three'
+import { computeFlushVolumesMatrix } from './flush-volumes'
+
+export { computeFlushVolumesMatrix, type FlushVolumeOptions } from './flush-volumes'
 
 /**
  * 组件信息接口 / Component Information Interface
@@ -43,7 +46,19 @@ interface PrintConfig {
   printSettingsId: string // 打印设置ID / Print Settings ID
   compression: 'none' | 'standard' // 压缩方式 / Compression Method
   seam_position?: 'nearest' | 'aligned' | 'back' | 'random' // 缝合位置 / Seam Position
-  different_settings_to_system: string[]
+  different_settings_to_system?: string[]
+  /**
+   * 换料冲刷体积矩阵 / Flushing volumes matrix (mm³), flattened row-major `n * n` (from -> to).
+   * 默认根据耗材颜色计算 / Computed from filament colors by default.
+   */
+  flush_volumes_matrix?: number[]
+  /** 冲刷体积倍率 / Flush multiplier. Not written unless set, so the slicer default applies. */
+  flush_multiplier?: number
+  /**
+   * 每次换料的最小冲刷体积，计算矩阵时使用 / Minimum purge per color change used when computing the matrix.
+   * Bambu Studio uses the printer's nozzle volume: 92 for A1 / A1 mini, 107 for X1 / P1.
+   */
+  nozzleVolume?: number
   metadata: Partial<{ Application: string, Copyright: string, ApplicationTitle: string }>
 }
 
@@ -451,6 +466,13 @@ function createProjectSettingsConfig(materials: MaterialInfo[], printConfig: Pri
     enable_support: '0',
     support_type: 'normal(auto)',
     print_settings_id: printConfig.printSettingsId,
+    // Without this key Bambu Studio falls back to 280 mm³ for every color change.
+    flush_volumes_matrix: (printConfig.flush_volumes_matrix ?? computeFlushVolumesMatrix(colors, { nozzleVolume: printConfig.nozzleVolume }))
+      .map(String),
+  }
+
+  if (printConfig.flush_multiplier !== undefined) {
+    projectSettings.flush_multiplier = [String(printConfig.flush_multiplier)]
   }
 
   if (printConfig.seam_position) {

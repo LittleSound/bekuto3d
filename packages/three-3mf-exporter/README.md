@@ -24,6 +24,7 @@ While developing [Bekuto3D](https://bekuto3d.ayaka.io), I discovered that Three.
 - Support for multiple materials and colors
 - Automatic model centering on print bed
 - Customizable print settings
+- Flushing volumes pre-computed from filament colors (same heuristic as Bambu Studio's "Recalculate")
 - Preserves model names and hierarchy
 
 ## Usage
@@ -64,6 +65,34 @@ const url = URL.createObjectURL(blob)
 const link = document.createElement('a')
 link.href = url
 ```
+
+### Flushing volumes
+
+The exported project settings include a `flush_volumes_matrix` computed from the filament colors, using the same color heuristic Bambu Studio applies when you click "Recalculate" in the flushing volumes dialog. Without it, Bambu Studio falls back to 280 mm³ for every color change.
+
+```typescript
+const blob = await exportTo3MF(meshOrGroup, {
+  // Minimum purge added to every color change. Bambu Studio uses the printer's
+  // nozzle volume: 92 for A1 / A1 mini (default), 107 for X1 / P1.
+  nozzleVolume: 107,
+
+  // Optional: scale all flushing volumes in the slicer (written as `flush_multiplier`).
+  flush_multiplier: 0.8,
+
+  // Optional: provide your own matrix (mm³, row-major n * n, from -> to) instead.
+  // flush_volumes_matrix: [0, 300, 450, 0],
+})
+```
+
+The matrix is also available on its own:
+
+```typescript
+import { computeFlushVolumesMatrix } from 'three-3mf-exporter'
+
+computeFlushVolumesMatrix(['#FF0000', '#0000FF']) // [0, 329, 485, 0]
+```
+
+Bambu Studio additionally uses measured values for some Bambu Lab palette colors, filament pairs and support materials; those are not reproduced, so a few entries may differ from what the slicer shows after "Recalculate".
 
 ## Sponsors
 
