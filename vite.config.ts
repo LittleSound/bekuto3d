@@ -52,7 +52,7 @@ export default defineConfig({
         VueRouterAutoImports,
         {
           // add any other imports you were relying on
-          'vue-router/auto': ['useLink'],
+          'vue-router': ['useLink'],
         },
       ],
       dts: true,

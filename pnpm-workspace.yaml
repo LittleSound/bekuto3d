@@ -1,4 +1,3 @@
-minimumReleaseAgeExcludePrune: true
 trustPolicy: no-downgrade
 
 peerDependencyRules:

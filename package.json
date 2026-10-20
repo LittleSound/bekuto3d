@@ -2,6 +2,9 @@
   "type": "module",
   "private": true,
   "packageManager": "pnpm@12.14.0",
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
   "scripts": {
     "build": "vite build",
     "packages:build": "pnpm -F './packages/*' run build",
