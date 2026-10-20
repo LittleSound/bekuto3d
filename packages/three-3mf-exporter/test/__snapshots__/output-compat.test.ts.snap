@@ -68,7 +68,7 @@ exports[`3MF output compatibility > keeps the exact XML layout for a scene with 
 
   </assemble>
 </config>",
-  "Metadata/project_settings.config": "{"printable_area":["0x0","256x0","256x256","0x256"],"printable_height":"256","bed_exclude_area":[],"filament_colour":["#ff0000","#00ff00","#ffffff"],"filament_settings_id":["Bambu PLA Basic @BBL A1","Bambu PLA Basic @BBL A1","Bambu PLA Basic @BBL A1"],"filament_diameter":["1.75","1.75","1.75"],"filament_is_support":["0","0","0"],"printer_model":"Bambu Lab A1","layer_height":"0.2","wall_loops":"2","sparse_infill_density":"15%","printer_settings_id":"Bambu Lab A1 0.4 nozzle","printer_variant":"0.4","nozzle_diameter":["0.4"],"enable_support":"0","support_type":"normal(auto)","print_settings_id":"0.20mm Standard @BBL A1"}",
+  "Metadata/project_settings.config": "{"printable_area":["0x0","256x0","256x256","0x256"],"printable_height":"256","bed_exclude_area":[],"filament_colour":["#ff0000","#00ff00","#ffffff"],"filament_settings_id":["Bambu PLA Basic @BBL A1","Bambu PLA Basic @BBL A1","Bambu PLA Basic @BBL A1"],"filament_diameter":["1.75","1.75","1.75"],"filament_is_support":["0","0","0"],"printer_model":"Bambu Lab A1","layer_height":"0.2","wall_loops":"2","sparse_infill_density":"15%","printer_settings_id":"Bambu Lab A1 0.4 nozzle","printer_variant":"0.4","nozzle_diameter":["0.4"],"enable_support":"0","support_type":"normal(auto)","print_settings_id":"0.20mm Standard @BBL A1","flush_volumes_matrix":["0","535","678","334","0","552","354","340","0"]}",
   "[Content_Types].xml": "<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml" />
