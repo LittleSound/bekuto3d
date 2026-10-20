@@ -9,6 +9,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -22,11 +25,11 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
 
       - name: Set node version to ${{ matrix.node_version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node_version }}
           cache: pnpm
@@ -38,7 +41,7 @@ jobs:
         run: pnpm run build
 
       - name: Test
-        run: pnpm run test
+        run: pnpm run test --run
 
       - name: Lint
         run: pnpm run lint

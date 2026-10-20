@@ -3,18 +3,15 @@
     "target": "es2020",
     "jsx": "preserve",
     "lib": ["DOM", "ESNext"],
-    "baseUrl": ".",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "paths": {
-      "~/*": ["src/*"],
-      "three-3mf-exporter": ["packages/three-3mf-exporter/src/index"]
+      "~/*": ["./src/*"],
+      "three-3mf-exporter": ["./packages/three-3mf-exporter/src/index"]
     },
     "resolveJsonModule": true,
     "types": [
-      "vite/client",
-      "unplugin-vue-macros/macros-global",
-      "unplugin-vue-router/client"
+      "vite/client"
     ],
     "allowJs": true,
     "strict": true,

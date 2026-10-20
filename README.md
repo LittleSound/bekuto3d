@@ -26,7 +26,7 @@ Bekuto 3D enables designers and developers to convert SVG files directly to 3D m
 
 <p align="center">
   <a href="https://github.com/sponsors/LittleSound">
-    <img src="https://cdn.jsdelivr.net/gh/littlesound/sponsors/sponsors.svg"/>
+    <img src="https://cdn.jsdelivr.net/gh/littlesound/sponsors/sponsors.svg" alt="Sponsors"/>
   </a>
 </p>
 
@@ -34,4 +34,4 @@ Bekuto 3D enables designers and developers to convert SVG files directly to 3D m
   This project is made possible by all the sponsors supporting my work <br>
   You can join them at my sponsors profile:
 </p>
-<p align="center"><a href="https://github.com/sponsors/LittleSound"><img src="https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86&style=for-the-badge" /></a></p>
+<p align="center"><a href="https://github.com/sponsors/LittleSound"><img src="https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86&style=for-the-badge" alt="Sponsor" /></a></p>
