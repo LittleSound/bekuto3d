@@ -1,4 +1,4 @@
-import type { Group, Matrix4, Mesh, MeshPhongMaterial, Object3D } from 'three'
+import type { BufferAttribute, Group, InterleavedBufferAttribute, Matrix4, Mesh, MeshPhongMaterial, Object3D } from 'three'
 import JSZip from 'jszip'
 import { Color, Vector3 } from 'three'
 
@@ -10,8 +10,10 @@ interface ComponentInfo {
   id: number
   type: 'mesh' | 'assembly'
   // 网格字段 / Mesh fields
-  vertices: { x: number, y: number, z: number }[]
-  triangles: { v1: number, v2: number, v3: number }[]
+  // 顶点坐标 (x, y, z 交错) / Vertex coordinates (interleaved x, y, z)
+  positions: Float64Array
+  // 三角形顶点索引 (v1, v2, v3 交错) / Triangle vertex indices (interleaved v1, v2, v3)
+  indices: Uint32Array
   material: MaterialInfo | null
   // 程序集字段 / Assembly fields
   subComponents: { objectId: number, transform: Matrix4 }[] // 子组件及其变换 / Sub-components and their transforms
@@ -43,7 +45,7 @@ interface PrintConfig {
   printSettingsId: string // 打印设置ID / Print Settings ID
   compression: 'none' | 'standard' // 压缩方式 / Compression Method
   seam_position?: 'nearest' | 'aligned' | 'back' | 'random' // 缝合位置 / Seam Position
-  different_settings_to_system: string[]
+  different_settings_to_system?: string[]
   metadata: Partial<{ Application: string, Copyright: string, ApplicationTitle: string }>
 }
 
@@ -140,55 +142,18 @@ export async function exportTo3MF(
     }
 
     const componentId = components.length + 1
-    const component: ComponentInfo = {
+    // 在局部空间（几何空间）处理顶点，不应用世界矩阵 / Vertices stay in LOCAL (geometry) space; world matrix is NOT applied
+    const { positions, indices } = collectMeshData(positionAttr, indexAttr)
+    components.push({
       id: componentId,
       type: 'mesh',
-      vertices: [],
-      triangles: [],
+      positions,
+      indices,
       material: materialInfo,
       name: mesh.name || `Mesh-${componentId}`,
       subComponents: [],
       uuid: generateUUID(),
-    }
-
-    // 顶点去重映射表 / Vertex De-duplication Map
-    const vertexMap = new Map<string, number>()
-
-    // 在局部空间（几何空间）处理顶点 / Process Vertices in LOCAL space (Geometry space)
-    const processVertex = (vertexIndex: number) => {
-      const vertex = new Vector3()
-      vertex.fromBufferAttribute(positionAttr, vertexIndex)
-      // 对于模块化组件，不要在这里应用世界矩阵 / Do NOT apply world matrix here for modular components
-
-      const vertexKey = `${vertex.x},${vertex.y},${vertex.z}`
-      if (!vertexMap.has(vertexKey)) {
-        vertexMap.set(vertexKey, component.vertices.length)
-        component.vertices.push({ x: vertex.x, y: vertex.y, z: vertex.z })
-      }
-      return vertexMap.get(vertexKey)!
-    }
-
-    // 处理三角形 / Process Triangles
-    if (indexAttr) {
-      for (let i = 0; i < indexAttr.count; i += 3) {
-        component.triangles.push({
-          v1: processVertex(indexAttr.getX(i)),
-          v2: processVertex(indexAttr.getX(i + 1)),
-          v3: processVertex(indexAttr.getX(i + 2)),
-        })
-      }
-    }
-    else {
-      for (let i = 0; i < positionAttr.count; i += 3) {
-        component.triangles.push({
-          v1: processVertex(i),
-          v2: processVertex(i + 1),
-          v3: processVertex(i + 2),
-        })
-      }
-    }
-
-    components.push(component)
+    })
     return componentId
   }
 
@@ -217,8 +182,8 @@ export async function exportTo3MF(
           type: 'assembly',
           subComponents,
           name: node.name || `Group-${assemblyId}`,
-          vertices: [],
-          triangles: [],
+          positions: new Float64Array(0),
+          indices: new Uint32Array(0),
           material: null,
           uuid: generateUUID(),
         })
@@ -232,7 +197,7 @@ export async function exportTo3MF(
   // 如果输入是场景，将其子项作为顶级构建项。如果是组或网格，作为单个顶级构建项。
   // If input is Scene, treat children as top-level build items. If Group or Mesh, treat as single top-level.
   const rootChildren = (object.type === 'Scene') ? object.children : [object]
-  const allVerticesWorld: Vector3[] = []
+  const bounds = createBoundsAccumulator()
 
   rootChildren.forEach((child) => {
     const childId = processNode(child)
@@ -240,21 +205,17 @@ export async function exportTo3MF(
       child.updateMatrix()
       const itemMatrix = child.matrix.clone()
 
-      const targetComp = components.find(c => c.id === childId)!
-      const getVerts = (c: ComponentInfo): Vector3[] => {
+      const expandBounds = (c: ComponentInfo, transforms: Matrix4[]) => {
         if (c.type === 'assembly') {
-          return c.subComponents.flatMap((sc) => {
-            const subComp = components.find(x => x.id === sc.objectId)!
-            return getVerts(subComp).map(v => v.clone().applyMatrix4(sc.transform))
+          c.subComponents.forEach((sc) => {
+            expandBounds(components.find(x => x.id === sc.objectId)!, [sc.transform, ...transforms])
           })
         }
-        return c.vertices.map(v => new Vector3(v.x, v.y, v.z))
+        else {
+          bounds.addPositions(c.positions, transforms)
+        }
       }
-
-      getVerts(targetComp).forEach((vec) => {
-        vec.applyMatrix4(itemMatrix)
-        allVerticesWorld.push(vec)
-      })
+      expandBounds(components.find(c => c.id === childId)!, [itemMatrix])
 
       buildItems.push({
         objectId: childId,
@@ -265,22 +226,7 @@ export async function exportTo3MF(
   })
 
   // 居中逻辑 / Centering Logic
-  let min = { x: Infinity, y: Infinity, z: Infinity }
-  let max = { x: -Infinity, y: -Infinity, z: -Infinity }
-  if (allVerticesWorld.length > 0) {
-    allVerticesWorld.forEach((v) => {
-      min.x = Math.min(min.x, v.x)
-      min.y = Math.min(min.y, v.y)
-      min.z = Math.min(min.z, v.z)
-      max.x = Math.max(max.x, v.x)
-      max.y = Math.max(max.y, v.y)
-      max.z = Math.max(max.z, v.z)
-    })
-  }
-  else {
-    min = { x: 0, y: 0, z: 0 }
-    max = { x: 0, y: 0, z: 0 }
-  }
+  const { min, max } = bounds.result()
 
   const modelCenter = { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2, z: (min.z + max.z) / 2 }
   const bedCenter = { x: printConfig.printableWidth / 2, y: printConfig.printableDepth / 2, z: 0 }
@@ -309,8 +255,12 @@ export async function exportTo3MF(
 
 /**
  * 创建主3dmodel.model文件的XML数据 / Create XML data for the main 3dmodel.model file
+ *
+ * Returns UTF-8 bytes instead of a string: the mesh section of a large model can exceed
+ * V8's max string length (~512 MiB), see https://github.com/LittleSound/bekuto3d/issues/19.
  */
-function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[], shift: { x: number, y: number, z: number }, printConfig: PrintConfig): string {
+function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[], shift: { x: number, y: number, z: number }, printConfig: PrintConfig): Uint8Array {
+  const out = createChunkedTextWriter()
   const metadata: string[] = []
   const metadataConfig = printConfig.metadata
   metadata.push(`<metadata name="CreationDate">${new Date().toISOString()}</metadata>`)
@@ -318,21 +268,34 @@ function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[]
     metadata.push(`<metadata name="${key}">${(metadataConfig as Record<string, unknown>)[key]}</metadata>`)
   }
 
-  const resources = components.map((c) => {
+  out.write(`<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" requiredextensions="p">
+    ${metadata.join('\n    ')}
+    <resources>
+`)
+
+  components.forEach((c, index) => {
+    if (index > 0)
+      out.write('\n')
     if (c.type === 'assembly') {
       const comps = c.subComponents.map((sc) => {
         const e = sc.transform.elements
         const tStr = `${e[0].toFixed(5)} ${e[1].toFixed(5)} ${e[2].toFixed(5)} ${e[4].toFixed(5)} ${e[5].toFixed(5)} ${e[6].toFixed(5)} ${e[8].toFixed(5)} ${e[9].toFixed(5)} ${e[10].toFixed(5)} ${e[12].toFixed(5)} ${e[13].toFixed(5)} ${e[14].toFixed(5)}`
         return `<component objectid="${sc.objectId}" transform="${tStr}" />`
       }).join('')
-      return `<object id="${c.id}" type="model" name="${c.name}"><components>${comps}</components></object>`
+      out.write(`<object id="${c.id}" type="model" name="${c.name}"><components>${comps}</components></object>`)
     }
     else {
-      const vXml = c.vertices.map(v => `<vertex x="${v.x.toFixed(5)}" y="${v.y.toFixed(5)}" z="${v.z.toFixed(5)}" />`).join(' ')
-      const tXml = c.triangles.map(t => `<triangle v1="${t.v1}" v2="${t.v2}" v3="${t.v3}" />`).join(' ')
-      return `<object id="${c.id}" type="model" name="${c.name}"><mesh><vertices>${vXml}</vertices><triangles>${tXml}</triangles></mesh></object>`
+      const { positions: p, indices: t } = c
+      out.write(`<object id="${c.id}" type="model" name="${c.name}"><mesh><vertices>`)
+      for (let i = 0; i < p.length; i += 3)
+        out.write(`${i > 0 ? ' ' : ''}<vertex x="${p[i].toFixed(5)}" y="${p[i + 1].toFixed(5)}" z="${p[i + 2].toFixed(5)}" />`)
+      out.write('</vertices><triangles>')
+      for (let i = 0; i < t.length; i += 3)
+        out.write(`${i > 0 ? ' ' : ''}<triangle v1="${t[i]}" v2="${t[i + 1]}" v3="${t[i + 2]}" />`)
+      out.write('</triangles></mesh></object>')
     }
-  }).join('\n')
+  })
 
   const build = buildItems.map((item) => {
     // 对平移元素应用位移 (12, 13, 14) / Apply shift to translation elements (12, 13, 14)
@@ -346,16 +309,148 @@ function createMainModelXML(components: ComponentInfo[], buildItems: BuildItem[]
     return `<item objectid="${item.objectId}" transform="${tStr}" printable="1" />`
   }).join('\n')
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" requiredextensions="p">
-    ${metadata.join('\n    ')}
-    <resources>
-${resources}
+  out.write(`
     </resources>
     <build>
 ${build}
     </build>
-</model>`
+</model>`)
+  return out.toUint8Array()
+}
+
+/**
+ * Reads the triangles of a geometry and merges vertices with identical coordinates.
+ *
+ * Vertex equality matches the former `${x},${y},${z}` string keys (-0 equals 0, all NaNs are
+ * equal) and ids are assigned in first-seen order, so the exported XML is unchanged.
+ * An open-addressing hash table over typed arrays replaces the `Map` with string keys:
+ * it is faster, far smaller, and not capped at 2^24 entries like a `Map`.
+ * A trailing partial triangle (count not divisible by 3) is ignored.
+ */
+function collectMeshData(positionAttr: BufferAttribute | InterleavedBufferAttribute, indexAttr: BufferAttribute | null): { positions: Float64Array, indices: Uint32Array } {
+  const cornerCount = Math.floor((indexAttr ? indexAttr.count : positionAttr.count) / 3) * 3
+  const indices = new Uint32Array(cornerCount)
+  const maxVertices = Math.min(cornerCount, positionAttr.count)
+  const positions = new Float64Array(maxVertices * 3)
+
+  let tableSize = 16
+  while (tableSize < maxVertices * 2)
+    tableSize *= 2
+  const mask = tableSize - 1
+  // Each slot holds `vertex id + 1`; 0 marks an empty slot.
+  const table = new Uint32Array(tableSize)
+
+  const scratch = new Float64Array(3)
+  const words = new Uint32Array(scratch.buffer)
+  const canonical = (n: number) => n === 0 ? 0 : Number.isNaN(n) ? Number.NaN : n
+  const same = (a: number, b: number) => a === b || (Number.isNaN(a) && Number.isNaN(b))
+  let vertexCount = 0
+
+  for (let corner = 0; corner < cornerCount; corner++) {
+    const source = indexAttr ? indexAttr.getX(corner) : corner
+    const x = scratch[0] = canonical(positionAttr.getX(source))
+    const y = scratch[1] = canonical(positionAttr.getY(source))
+    const z = scratch[2] = canonical(positionAttr.getZ(source))
+
+    let h = 0x9E3779B9
+    for (let w = 0; w < 6; w++) {
+      h = Math.imul(h ^ words[w], 0x85EBCA6B)
+      h ^= h >>> 13
+    }
+    h = Math.imul(h ^ (h >>> 16), 0xC2B2AE35)
+    h ^= h >>> 16
+
+    let slot = h & mask
+    let id = -1
+    while (table[slot] !== 0) {
+      const o = (table[slot] - 1) * 3
+      if (same(positions[o], x) && same(positions[o + 1], y) && same(positions[o + 2], z)) {
+        id = table[slot] - 1
+        break
+      }
+      slot = (slot + 1) & mask
+    }
+    if (id === -1) {
+      id = vertexCount++
+      table[slot] = id + 1
+      positions[id * 3] = x
+      positions[id * 3 + 1] = y
+      positions[id * 3 + 2] = z
+    }
+    indices[corner] = id
+  }
+
+  return { positions: positions.slice(0, vertexCount * 3), indices }
+}
+
+/**
+ * Accumulates the world-space bounding box of mesh vertices without materializing
+ * transformed copies. `transforms` are applied in order (innermost first), the same way
+ * nested assemblies are placed. An accumulator that saw no vertices reports a zero box.
+ */
+function createBoundsAccumulator() {
+  const min = { x: Infinity, y: Infinity, z: Infinity }
+  const max = { x: -Infinity, y: -Infinity, z: -Infinity }
+  const v = new Vector3()
+  let empty = true
+  return {
+    addPositions(positions: Float64Array, transforms: Matrix4[]) {
+      for (let i = 0; i < positions.length; i += 3) {
+        v.set(positions[i], positions[i + 1], positions[i + 2])
+        for (const m of transforms)
+          v.applyMatrix4(m)
+        min.x = Math.min(min.x, v.x)
+        min.y = Math.min(min.y, v.y)
+        min.z = Math.min(min.z, v.z)
+        max.x = Math.max(max.x, v.x)
+        max.y = Math.max(max.y, v.y)
+        max.z = Math.max(max.z, v.z)
+        empty = false
+      }
+    },
+    result() {
+      return empty
+        ? { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } }
+        : { min, max }
+    },
+  }
+}
+
+/**
+ * Collects text and UTF-8 encodes it in ~1M character chunks, so documents larger than
+ * V8's max string length can be produced. `toUint8Array` concatenates and releases the chunks.
+ */
+function createChunkedTextWriter() {
+  const encoder = new TextEncoder()
+  const chunks: Uint8Array[] = []
+  let pending = ''
+  let byteLength = 0
+  const flush = () => {
+    if (!pending)
+      return
+    const chunk = encoder.encode(pending)
+    chunks.push(chunk)
+    byteLength += chunk.byteLength
+    pending = ''
+  }
+  return {
+    write(text: string) {
+      pending += text
+      if (pending.length >= 1 << 20)
+        flush()
+    },
+    toUint8Array(): Uint8Array {
+      flush()
+      const result = new Uint8Array(byteLength)
+      let offset = 0
+      for (const chunk of chunks) {
+        result.set(chunk, offset)
+        offset += chunk.byteLength
+      }
+      chunks.length = 0
+      return result
+    },
+  }
 }
 
 /**
