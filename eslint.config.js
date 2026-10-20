@@ -9,4 +9,16 @@ export default antfu(
       'no-sequences': 'off',
     },
   },
+  {
+    files: ['pnpm-workspace.yaml'],
+    rules: {
+      // Drop the preset's `minimumReleaseAgeExcludePrune`: it is a no-op without a `minimumReleaseAgeExclude` list
+      'pnpm/yaml-enforce-settings': ['error', {
+        settings: {
+          shellEmulator: true,
+          trustPolicy: 'no-downgrade',
+        },
+      }],
+    },
+  },
 )

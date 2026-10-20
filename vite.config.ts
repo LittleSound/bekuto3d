@@ -1,4 +1,4 @@
-/// <reference types="vitest" />
+/// <reference types="vitest/config" />
 
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -7,15 +7,15 @@ import Vue from '@vitejs/plugin-vue'
 import UnoCSS from 'unocss/vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
-import { VueRouterAutoImports } from 'unplugin-vue-router'
-
-import VueRouter from 'unplugin-vue-router/vite'
 import { defineConfig } from 'vite'
+
+import { VueRouterAutoImports } from 'vue-router/unplugin'
+import VueRouter from 'vue-router/vite'
 
 export default defineConfig({
   resolve: {
     alias: {
-      '~/': `${path.resolve(__dirname, 'src')}/`,
+      '~/': `${path.resolve(import.meta.dirname, 'src')}/`,
       'three-3mf-exporter': fileURLToPath(new URL('./packages/three-3mf-exporter/src', import.meta.url)),
     },
   },
@@ -41,7 +41,7 @@ export default defineConfig({
       ...templateCompilerOptions,
     }),
 
-    // https://github.com/posva/unplugin-vue-router
+    // https://router.vuejs.org/file-based-routing/
     VueRouter(),
 
     // https://github.com/antfu/unplugin-auto-import
@@ -52,7 +52,7 @@ export default defineConfig({
         VueRouterAutoImports,
         {
           // add any other imports you were relying on
-          'vue-router/auto': ['useLink'],
+          'vue-router': ['useLink'],
         },
       ],
       dts: true,
