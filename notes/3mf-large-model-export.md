@@ -39,3 +39,10 @@ every vertex/triangle was a JS object, vertex de-duplication used a `Map` with s
 
 - JSZip has no ZIP64 support, so a single entry or the archive must stay below 4 GiB.
 - Peak memory is still roughly: input geometry + typed copies + XML bytes + zip output.
+
+## XML escaping
+
+- Every user-provided string interpolated into XML (object/part names, metadata keys and values)
+  must go through `escapeXml`, which escapes markup characters and drops characters XML 1.0
+  forbids. Unescaped names such as `Tom & Jerry` produce a 3MF that slicers reject.
+  `test/xml-escape.test.ts` parses every XML part strictly to catch new interpolation points.
