@@ -43,7 +43,7 @@ interface PrintConfig {
   printSettingsId: string // 打印设置ID / Print Settings ID
   compression: 'none' | 'standard' // 压缩方式 / Compression Method
   seam_position?: 'nearest' | 'aligned' | 'back' | 'random' // 缝合位置 / Seam Position
-  different_settings_to_system: string[]
+  different_settings_to_system?: string[]
   metadata: Partial<{ Application: string, Copyright: string, ApplicationTitle: string }>
 }
 
