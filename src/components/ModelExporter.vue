@@ -3,6 +3,7 @@ import type { Group } from 'three'
 import { exportTo3MF } from 'three-3mf-exporter'
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js'
 import { STLExporter } from 'three/addons/exporters/STLExporter.js'
+import { stlGroup } from '../model/stlGroup'
 
 // 定义导出格式类型
 type ExportFormat = 'stl' | 'gltf' | 'threeMF'
@@ -71,7 +72,7 @@ const exportHandlers = {
     if (!props.modelGroup)
       return
     exporters.stl.value ||= new STLExporter()
-    const result = exporters.stl.value.parse(props.modelGroup, { binary: true })
+    const result = exporters.stl.value.parse(stlGroup(props.modelGroup), { binary: true })
     exportUrls.stl = URL.createObjectURL(new Blob([result], { type: EXPORT_FORMATS.stl.mimeType }))
   },
 

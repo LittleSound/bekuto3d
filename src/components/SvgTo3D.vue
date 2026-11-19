@@ -1,11 +1,14 @@
 <script lang="ts" setup>
+import type { BaseplateSettings } from '../model/baseplate'
 import type { BooleanOperation } from '../model/mergeGeometry'
 import type { ModelPart, ShapeWithColor } from '~/types/three-types'
 import potrace from 'potrace'
 import { Color } from 'three'
 import { depthLimit, partKey, startZLimit } from '~/types/three-types'
+import { useBaseplate } from '../composables/useBaseplate'
 import { useModelSize } from '../composables/useModelSize'
 import { useSvgLoader } from '../composables/useSvgLoader'
+import { defaultBaseplate, demoBaseplate } from '../model/baseplate'
 import { mergeParts, partSource, splitHole, toggleHole } from '../model/mergeParts'
 import FileDropZone from './FileDropZone.vue'
 import IconInput from './IconInput.vue'
@@ -46,18 +49,35 @@ const canOperate = computed(() => !isComputing.value && !isExporting.value && se
   && [...selectedShapeIndices.value].every(index => svgShapes.value[index]?.depth > 0))
 const lastSelectedIndex = ref<number | null>(null) // 用于 Shift 范围选择
 
-// 使用 useModelSize composable
-const {
-  size,
+const shownShapes = computed(() => svgShapes.value.filter(part => part.depth > 0))
+const { scale, size, points, center } = useModelSize(() => shownShapes.value, () => curveSegments.value)
+const modelSize = ref({ width: 0, height: 0, depth: 0 })
+const plate = ref<BaseplateSettings>({ ...defaultBaseplate })
+const { shapes: plateShapes, fitted, status: plateStatus, ready: plateReady } = useBaseplate(
+  plate,
+  shownShapes,
   scale,
-  modelSize,
-  modelOffset,
-  watchModelSizeChanges,
-} = useModelSize()
+  center,
+  points,
+  curveSegments,
+)
+const artPosition = computed(() => ({
+  x: -center.value.x * scale.value + (fitted.value ? plate.value.offsetX : 0),
+  y: -center.value.y * scale.value - (fitted.value ? plate.value.offsetY : 0),
+  z: plate.value.style !== 'none' && shownShapes.value.length
+    ? plate.value.thickness - shownShapes.value.reduce((min, part) => Math.min(min, part.startZ), Infinity)
+    : 0,
+}))
+
+function changePlate(settings: BaseplateSettings) {
+  remember('baseplate change')
+  plate.value = settings
+}
 
 interface UndoEntry {
   action: string
   parts: ModelPart[]
+  plate: BaseplateSettings
   selection: Set<number>
   anchor: number | null
   scale: number
@@ -79,6 +99,7 @@ function remember(action: string, key?: string) {
   editKey = key
   history.value = [...history.value.slice(-39), {
     action,
+    plate: { ...plate.value },
     parts: svgShapes.value.map(part => ({ ...part })),
     selection: new Set(selectedShapeIndices.value),
     anchor: lastSelectedIndex.value,
@@ -97,6 +118,7 @@ function undo() {
   svgShapes.value = entry.parts
   isDefaultSvg.value = false
   fileName.value = entry.fileName
+  plate.value = entry.plate
   scale.value = entry.scale
   resetPartSelection()
   selectedShapeIndices.value = entry.selection
@@ -125,14 +147,13 @@ function changeSize(value: number) {
 
 // 默认模型信息
 const DEFAULT_SVG = '/model/bekuto3d.svg'
-const defaultSvgOffsetList = [0, 2]
-const defaultSvgDepthList = [2, 0, 1, 1, 1, 2, 1, 1.4, 1.6]
+const defaultSvgDepthList = [0, 1, 1, 1, 2, 1, 1.4, 1.6]
 
 const { createShapesWithColor } = useSvgLoader()
 
 const modelGroup = computed(() => modelRendererRef.value?.modelGroup ?? null)
 
-watch([scale, () => svgShapes.value.map(part => [part.color, part.startZ, part.depth])], () => {
+watch([scale, plate, () => svgShapes.value.map(part => [part.color, part.startZ, part.depth])], () => {
   partRevision.value++
 })
 
@@ -156,8 +177,6 @@ onUnmounted(() => {
       part.geometry.dispose()
   }
 })
-
-const shownShapes = computed(() => svgShapes.value.filter(i => i.depth))
 
 const insertsByOwner = computed(() => {
   const owners = new Map<string, Map<number, number>>()
@@ -184,26 +203,24 @@ function parseShapes(svg: string) {
 function parseLogoShapes(svg: string) {
   return parseShapes(svg).map((item, index) => ({
     ...item,
-    startZ: defaultSvgOffsetList[index] ?? defaultSvgOffsetList[defaultSvgOffsetList.length - 1] ?? 0,
     depth: defaultSvgDepthList[index] ?? 2,
   }))
 }
 
-function mountShapes(shapes: ShapeWithColor[], placeholder = false) {
+function mountShapes(shapes: ShapeWithColor[], source: 'import' | 'demo' | 'standby' = 'import') {
   activeGeometryJob?.abort()
   finishEdit()
-  if (!placeholder)
+  if (source !== 'standby')
     history.value = []
   resetPartSelection()
   svgShapes.value = shapes
-  isDefaultSvg.value = placeholder
-  const mounted = svgShapes.value
-
-  nextTick(async () => {
-    await nextTick()
-    if (svgShapes.value === mounted)
-      size.value = defaultSize
-  })
+  isDefaultSvg.value = source === 'standby'
+  const demo = source !== 'import'
+  plate.value = { ...(demo ? demoBaseplate : defaultBaseplate) }
+  if (demo)
+    scale.value = demoBaseplate.size / 500
+  else
+    size.value = defaultSize
 }
 
 function importIcon(id: string, svg: string) {
@@ -222,7 +239,7 @@ async function loadDefaultSvg() {
     if (fileName.value)
       return
 
-    mountShapes(parseLogoShapes(svgData), true)
+    mountShapes(parseLogoShapes(svgData), 'standby')
   }
   catch (error) {
     console.error('加载默认 SVG 失败:', error)
@@ -236,7 +253,7 @@ async function handlePlayDemo() {
     svgCode.value = ''
     fileName.value = 'bekuto3d-logo.svg'
 
-    mountShapes(parseLogoShapes(svgData))
+    mountShapes(parseLogoShapes(svgData), 'demo')
   }
   catch (error) {
     console.error('加载 Demo SVG 失败:', error)
@@ -270,52 +287,19 @@ async function handleFileSelected(files: File[]) {
   }
 }
 
-async function convertBitmapToSvg(file: File) {
-  /*
-    TODO: There are currently a few issues that we hope can be resolved in the future.
-
-    - Does not support multiple colors
-    - The inner edges of hollow shapes are missing, a phenomenon usually referred to as non-manifold edges, which are structures that cannot be 3D printed.
-    - Cannot remove the added background, the background should be optional.
-  */
-
-  const { width: imageWidth, height: imageHeight } = await getImageWidthHeight(file)
-
-  const padding = 8
-  const cornerRadius = 8
-
-  return new Promise<string>((resolve, reject) => {
-    file.arrayBuffer().then((buffer) => {
-      potrace.trace(Buffer.from(buffer), (_: any, svg: string) => {
-        const svgWidth = imageWidth + padding * 2
-        const svgHeight = imageHeight + padding * 2
-
-        const contentMatch = svg.match(/<svg[^>]*>([\s\S]*)<\/svg>/)
-        const content = contentMatch ? contentMatch[1] : ''
-
-        const svgWithBg = `<svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
-  <rect x="0" y="0" width="${svgWidth}" height="${svgHeight}" rx="${cornerRadius}" ry="${cornerRadius}" fill="white"/>
-  <g transform="translate(${padding},${padding})">
-    ${content}
-  </g>
-</svg>`
-
-        resolve(svgWithBg)
-      })
-    }).catch(reject)
-  })
-}
-
-function getImageWidthHeight(file: File) {
-  return new Promise<{ width: number, height: number }>((resolve) => {
-    const img = new Image()
-    img.src = URL.createObjectURL(file)
-    img.onload = () => {
-      resolve({
-        width: img.width,
-        height: img.height,
+function convertBitmapToSvg(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error)
+    reader.onload = () => {
+      potrace.trace(String(reader.result), (error, svg) => {
+        if (error)
+          reject(error)
+        else
+          resolve(svg)
       })
     }
+    reader.readAsDataURL(file)
   })
 }
 
@@ -323,9 +307,6 @@ function getImageWidthHeight(file: File) {
 onMounted(() => {
   loadDefaultSvg()
 })
-
-// Monitor model changes
-watchModelSizeChanges(modelGroup, svgShapes)
 
 const cameraPosition = ref<[number, number, number]>([-50, 50, 100])
 
@@ -699,10 +680,13 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
   <ModelRenderer
     ref="modelRendererRef"
     v-model:model-size="modelSize"
-    v-model:model-offset="modelOffset"
     v-model:camera-position="cameraPosition"
     v-model:selected-shape-indices="selectedShownShapeIndices"
     v-model:hover-shape-index="hoverShownShapeIndex"
+    :art-position="artPosition"
+    :plate-shapes="plateShapes"
+    :plate-color="plate.color"
+    :plate-thickness="plate.thickness"
     :shapes="shownShapes"
     :z-fighting="!isExporting"
     :scale="scale"
@@ -809,12 +793,13 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
       </div>
     </div>
     <template v-if="isLoaded">
-      <div flex="~ gap-2 items-center">
+      <label flex="~ gap-2 items-center">
+        <span text-sm>Artwork size</span>
         <IconInput
           :value="size"
           icon="i-iconoir-scale-frame-enlarge"
           type="number"
-          title="Scale"
+          title="Artwork size (mm)"
           class="w-30"
           @update:value="changeSize"
           @blur="finishEdit"
@@ -822,7 +807,12 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
         />
         <div flex-1 />
         <div>unit: <span text-blue>mm</span></div>
-      </div>
+      </label>
+      <BaseplateControls :settings="plate" :disabled="isExporting" @change="changePlate">
+        <p v-if="plateStatus" role="status" text-xs mt-2>
+          {{ plateStatus }}
+        </p>
+      </BaseplateControls>
       <div ref="partsList" flex="~ col">
         <div class="mb-2 flex gap-2 items-center">
           <h2 class="text-sm font-semibold mr-auto" aria-live="polite">
@@ -953,7 +943,7 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
       <ModelExporter
         v-model:is-exporting="isExporting"
         :revision="partRevision"
-        :model-group="modelGroup"
+        :model-group="plateReady ? modelGroup : null"
         :file-name="isDefaultSvg ? 'default-bekuto3d.svg' : fileName"
       />
     </template>

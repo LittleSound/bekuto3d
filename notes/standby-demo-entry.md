@@ -19,7 +19,7 @@ These entries must be visually subtle (secondary) and consistent with the existi
 
 - Keep the default built-in logo as the initial placeholder model on load.
 - Play Demo should not create a separate flow/state; it should call the same shape-mounting pipeline used for user-provided SVG data.
-- Apply the existing logo-specific defaults (startZ/depth lists) for a good first impression, but do **not** mark it as the read-only default placeholder.
+- Load the foreground relief depths and the editable rounded-square base preset together for both standby and Play demo.
 - Closing the current file should return to the placeholder logo (standby).
 
 ### Iconify library
