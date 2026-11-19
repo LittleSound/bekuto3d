@@ -11,10 +11,13 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    BaseplateControls: typeof import('./src/components/BaseplateControls.vue')['default']
     FileDropZone: typeof import('./src/components/FileDropZone.vue')['default']
+    IconifyPicker: typeof import('./src/components/IconifyPicker.vue')['default']
     IconInput: typeof import('./src/components/IconInput.vue')['default']
     ModelExporter: typeof import('./src/components/ModelExporter.vue')['default']
     ModelRenderer: typeof import('./src/components/ModelRenderer.vue')['default']
+    PartHoles: typeof import('./src/components/PartHoles.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SvgTo3D: typeof import('./src/components/SvgTo3D.vue')['default']

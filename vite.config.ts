@@ -13,6 +13,10 @@ import { VueRouterAutoImports } from 'vue-router/unplugin'
 import VueRouter from 'vue-router/vite'
 
 export default defineConfig({
+  worker: { format: 'es' },
+  optimizeDeps: {
+    include: ['manifold-3d/lib/wasm'],
+  },
   resolve: {
     alias: {
       '~/': `${path.resolve(import.meta.dirname, 'src')}/`,
@@ -38,7 +42,10 @@ export default defineConfig({
         propsDestructure: true,
         defineModel: true,
       },
-      ...templateCompilerOptions,
+      template: {
+        ...templateCompilerOptions.template,
+        transformAssetUrls: { includeAbsolute: false },
+      },
     }),
 
     // https://router.vuejs.org/file-based-routing/

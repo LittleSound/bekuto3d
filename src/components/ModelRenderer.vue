@@ -1,10 +1,11 @@
 <script lang="ts" setup>
 import type { TresPointerEvent } from '@tresjs/core'
-import type { Group } from 'three'
-import type { ShapeWithColor } from '~/types/three-types'
+import type { Group, Shape } from 'three'
+import type { ModelPart } from '~/types/three-types'
 import { OrbitControls } from '@tresjs/cientos'
 import { TresCanvas } from '@tresjs/core'
 import { Box3, Vector3 } from 'three'
+import { partKey } from '~/types/three-types'
 
 interface ModelSize {
   width: number
@@ -33,9 +34,12 @@ interface ControlsConfig {
 }
 
 const props = defineProps<{
-  shapes: ShapeWithColor[]
+  shapes: ModelPart[]
   modelSize: ModelSize
-  modelOffset: ModelOffset
+  artPosition: ModelOffset
+  plateShapes: Shape[]
+  plateColor: string
+  plateThickness: number
   scale: number
   curveSegments: number
   materialConfig: MaterialConfig
@@ -45,7 +49,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:modelSize', size: ModelSize): void
-  (e: 'update:modelOffset', offset: ModelOffset): void
   (e: 'modelLoaded'): void
   (e: 'meshClick', index: number, event: TresPointerEvent): void
   (e: 'pointerMissed'): void
@@ -72,7 +75,7 @@ const modelGroup = computed(() => toRaw(groupRef.value))
  * @param shapes
  * @param scale
  */
-function suppressZFighting(shapes: ShapeWithColor[], scale = 0.001) {
+function suppressZFighting(shapes: ModelPart[], scale = 0.001) {
   const depths = new Map<number, number>()
   const offsets = new Map<number, number>()
 
@@ -152,7 +155,7 @@ function getShapeMaterialConfig(index: number) {
 }
 
 // 监听模型变化并更新尺寸
-watch([() => groupRef.value, () => props.scale, () => props.shapes.map(i => [i.depth, i.startZ])], () => {
+watch([() => groupRef.value, () => props.scale, () => props.artPosition, () => props.plateShapes, () => props.plateThickness, () => props.shapes.map(i => [partKey(i), i.depth, i.startZ])], () => {
   calculateModelSize()
 })
 
@@ -167,19 +170,14 @@ function calculateModelSize() {
       const size = new Vector3()
       box.getSize(size)
 
-      const newOffset = {
-        x: size.x / props.scale / -2,
-        y: size.y / props.scale / -2,
-        z: 0,
-      }
-
+      const lower = props.shapes.reduce((min, part) => Math.min(min, part.startZ), Infinity)
+      const upper = props.shapes.reduce((max, part) => Math.max(max, part.startZ + part.depth), -Infinity)
       const newSize = {
         width: Number(size.x.toFixed(2)),
         height: Number(size.y.toFixed(2)),
-        depth: Number(size.z.toFixed(2)),
+        depth: Number((Math.max(0, upper - lower) + (props.plateShapes.length ? props.plateThickness : 0)).toFixed(2)),
       }
 
-      emit('update:modelOffset', newOffset)
       emit('update:modelSize', newSize)
       emit('modelLoaded')
     }
@@ -220,18 +218,25 @@ defineExpose({
     <TresGroup
       v-if="shapes.length"
       ref="group"
-      :scale="[scale, -scale, 1]"
+      :scale="[1, -1, 1]"
     >
+      <TresMesh v-if="plateShapes.length" name="Baseplate">
+        <TresExtrudeGeometry :args="[plateShapes, { depth: plateThickness, bevelEnabled: false, curveSegments }]" />
+        <TresMeshPhongMaterial :color="plateColor" :shininess="materialConfig.shininess" />
+      </TresMesh>
       <TresMesh
         v-for="(item, index) in shownShapes"
-        :key="index"
-        :position="[modelOffset.x, modelOffset.y, modelOffset.z + item.startZ]"
+        :key="partKey(item)"
+        :args="'geometry' in item ? [item.geometry] : []"
+        :scale="[scale, scale, 'solid' in item ? item.depth : 1]"
+        :position="[artPosition.x, artPosition.y, artPosition.z + item.startZ]"
         :render-order="index + 1"
         @pointerenter="addHoverModel(index, $event)"
         @pointerleave="removeHoverModel(index, $event)"
         @click="handleMeshClick(index, $event)"
       >
         <TresExtrudeGeometry
+          v-if="'shape' in item"
           :args="[item.shape, {
             depth: item.depth,
             bevelEnabled: false,
@@ -240,6 +245,7 @@ defineExpose({
         />
         <TresMeshPhongMaterial
           :color="item.color"
+          :flat-shading="'geometry' in item"
           :opacity="item.opacity"
           :polygon-offset="!!item.polygonOffset"
           :polygon-offset-factor="item.polygonOffset"

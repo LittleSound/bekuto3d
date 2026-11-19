@@ -17,12 +17,14 @@
     "postinstall": "npx simple-git-hooks"
   },
   "dependencies": {
+    "@iconify/vue": "^5.0.5",
     "@tresjs/cientos": "^5.9.3",
     "@tresjs/core": "^5.9.3",
     "@vueuse/core": "^15.0.0",
     "fast-xml-parser": "^5.11.2",
     "fix-path-directions": "^1.0.5",
     "jszip": "^3.10.2",
+    "manifold-3d": "^3.5.5",
     "potrace": "^2.1.8",
     "three": "^0.186.1",
     "unstroke": "~1.0.0",
