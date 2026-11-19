@@ -69,6 +69,14 @@ function changeNumber(field: Field, input: HTMLInputElement) {
           <option>Round</option><option>Miter</option><option>Bevel</option>
         </select>
       </label>
+      <button
+        v-else type="button"
+        class="text-xs px-2 py-1 border rounded col-span-2 cursor-pointer justify-self-end disabled:opacity-45 disabled:cursor-default"
+        :disabled="settings.offsetX === 0 && settings.offsetY === 0"
+        @click="emit('change', { ...settings, offsetX: 0, offsetY: 0 })"
+      >
+        Center artwork
+      </button>
     </div>
     <slot />
   </fieldset>
