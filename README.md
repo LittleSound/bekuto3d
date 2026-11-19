@@ -4,6 +4,8 @@ SVG to 3D Model Converter
 
 Convert SVG files to 3D models. Export STL, OBJ, GLTF, or 3MF.
 
+Upload or paste an SVG with solid-color strokes to import its outlines as editable 3D parts. Dashed strokes currently import as continuous lines.
+
 Use it for 3D Printing or 3D Web Development.
 
 Bekuto 3D enables designers and developers to convert SVG files directly to 3D models for rapid prototyping and 3D printing.

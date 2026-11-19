@@ -218,6 +218,9 @@ importers:
       three:
         specifier: ^0.186.1
         version: 0.186.1
+      unstroke:
+        specifier: ~1.0.0
+        version: 1.0.0(svgo@4.1.0)
       vue:
         specifier: ^3.5.44
         version: 3.5.44(typescript@6.0.3)
@@ -2240,6 +2243,9 @@ packages:
 
   citty@0.1.6:
     resolution: {integrity: sha512-tskPPKEs8D2KPafUypv2gxwJP8h/OaJmC82QQGGDQcHvXX43xF2VDACcJVmZ0EuSxkpO9Kc4MlrA3q0+FG58AQ==}
+
+  clipper-lib@6.4.2:
+    resolution: {integrity: sha512-knglhjQX5ihNj/XCIs6zCHrTemdvHY3LPZP9XB2nq2/3igyYMFueFXtfp84baJvEE+f8pO1ZS4UVeEgmLnAprQ==}
 
   colorette@2.0.20:
     resolution: {integrity: sha512-IfEDxwoWIjkeXL1eXcDiow4UbKjhLdq6/EuSVR9GMN7KVH3r9gQ83e73hsz1Nd1T3ijd5xv1wcWRYO+D6kCI2w==}
@@ -4271,6 +4277,16 @@ packages:
       vite:
         optional: true
       webpack:
+        optional: true
+
+  unstroke@1.0.0:
+    resolution: {integrity: sha512-qBzoukEUyCIxERdOeUhZFYu2Zui5I561MUDiyfhp6n8A2vkmzc9AmhWnOxKZC1AaiuaUeEmQhZV6+srKsDxHEg==}
+    engines: {node: '>=20'}
+    hasBin: true
+    peerDependencies:
+      svgo: ^4.0.0
+    peerDependenciesMeta:
+      svgo:
         optional: true
 
   untyped@2.0.0:
@@ -6441,6 +6457,8 @@ snapshots:
   citty@0.1.6:
     dependencies:
       consola: 3.4.2
+
+  clipper-lib@6.4.2: {}
 
   colorette@2.0.20: {}
 
@@ -8800,6 +8818,12 @@ snapshots:
       rolldown: 1.2.14
       rollup: 4.64.10
       vite: 8.3.4(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1)
+
+  unstroke@1.0.0(svgo@4.1.0):
+    dependencies:
+      clipper-lib: 6.4.2
+    optionalDependencies:
+      svgo: 4.1.0
 
   untyped@2.0.0:
     dependencies:
