@@ -15,6 +15,7 @@ interface ExportConfig {
 
 const props = defineProps<{
   modelGroup: Group | null
+  revision: number
   fileName: string
 }>()
 
@@ -113,10 +114,15 @@ const exportHandlers = {
 
 // 统一的导出处理函数
 async function handleExport(format: ExportFormat) {
+  if (isExporting.value || !props.modelGroup)
+    return
+  const revision = props.revision
   isExporting.value = true
-  await nextTick()
   try {
+    await nextTick()
     await exportHandlers[format]()
+    if (revision !== props.revision)
+      clearUrls()
   }
   finally {
     isExporting.value = false
@@ -126,6 +132,9 @@ async function handleExport(format: ExportFormat) {
 // 清除所有URL
 function clearUrls() {
   Object.keys(exportUrls).forEach((key) => {
+    const url = exportUrls[key as ExportFormat]
+    if (url)
+      URL.revokeObjectURL(url)
     exportUrls[key as ExportFormat] = ''
   })
 }
@@ -135,7 +144,8 @@ function clearUrl(format: ExportFormat) {
   exportUrls[format] = ''
 }
 
-// 组件卸载时清理URL
+watch(() => props.revision, clearUrls)
+
 onUnmounted(() => {
   clearUrls()
 })
@@ -159,6 +169,7 @@ onUnmounted(() => {
         bg-gray:30
         flex-1
         cursor-pointer
+        :disabled="isExporting || !modelGroup"
         @click="handleExport(format as ExportFormat)"
       >
         {{ config.label }}

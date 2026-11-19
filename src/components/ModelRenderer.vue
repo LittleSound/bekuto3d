@@ -1,10 +1,11 @@
 <script lang="ts" setup>
 import type { TresPointerEvent } from '@tresjs/core'
 import type { Group } from 'three'
-import type { ShapeWithColor } from '~/types/three-types'
+import type { ModelPart } from '~/types/three-types'
 import { OrbitControls } from '@tresjs/cientos'
 import { TresCanvas } from '@tresjs/core'
 import { Box3, Vector3 } from 'three'
+import { partKey } from '~/types/three-types'
 
 interface ModelSize {
   width: number
@@ -33,7 +34,7 @@ interface ControlsConfig {
 }
 
 const props = defineProps<{
-  shapes: ShapeWithColor[]
+  shapes: ModelPart[]
   modelSize: ModelSize
   modelOffset: ModelOffset
   scale: number
@@ -72,7 +73,7 @@ const modelGroup = computed(() => toRaw(groupRef.value))
  * @param shapes
  * @param scale
  */
-function suppressZFighting(shapes: ShapeWithColor[], scale = 0.001) {
+function suppressZFighting(shapes: ModelPart[], scale = 0.001) {
   const depths = new Map<number, number>()
   const offsets = new Map<number, number>()
 
@@ -224,7 +225,9 @@ defineExpose({
     >
       <TresMesh
         v-for="(item, index) in shownShapes"
-        :key="index"
+        :key="partKey(item)"
+        :args="'geometry' in item ? [item.geometry] : []"
+        :scale="[1, 1, 'solid' in item ? item.depth : 1]"
         :position="[modelOffset.x, modelOffset.y, modelOffset.z + item.startZ]"
         :render-order="index + 1"
         @pointerenter="addHoverModel(index, $event)"
@@ -232,6 +235,7 @@ defineExpose({
         @click="handleMeshClick(index, $event)"
       >
         <TresExtrudeGeometry
+          v-if="'shape' in item"
           :args="[item.shape, {
             depth: item.depth,
             bevelEnabled: false,
@@ -240,6 +244,7 @@ defineExpose({
         />
         <TresMeshPhongMaterial
           :color="item.color"
+          :flat-shading="'geometry' in item"
           :opacity="item.opacity"
           :polygon-offset="!!item.polygonOffset"
           :polygon-offset-factor="item.polygonOffset"
