@@ -18,6 +18,7 @@ These entries must be visually subtle (secondary) and consistent with the existi
 ### Design Notes
 
 - Keep the default built-in logo as the initial placeholder model on load.
+- Keep root-relative URLs for assets in `public/` as browser URLs in Vue templates. Importing them as modules can produce drive-less file URLs when Vitest loads the editor on Windows.
 - Play Demo should not create a separate flow/state; it should call the same shape-mounting pipeline used for user-provided SVG data.
 - Load the foreground relief depths and the editable rounded-square base preset together for both standby and Play demo.
 - Closing the current file should return to the placeholder logo (standby).

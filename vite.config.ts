@@ -42,7 +42,10 @@ export default defineConfig({
         propsDestructure: true,
         defineModel: true,
       },
-      ...templateCompilerOptions,
+      template: {
+        ...templateCompilerOptions.template,
+        transformAssetUrls: { includeAbsolute: false },
+      },
     }),
 
     // https://router.vuejs.org/file-based-routing/
