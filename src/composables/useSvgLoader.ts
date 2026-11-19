@@ -2,6 +2,7 @@ import type { ShapeWithColor } from '~/types/three-types'
 import fixPathDirections from 'fix-path-directions'
 import { Color } from 'three'
 import { SVGLoader } from 'three/addons/loaders/SVGLoader.js'
+import { expandStrokes } from '../svg/expandStrokes'
 
 const { getFixedPathDataString } = fixPathDirections as {
   getFixedPathDataString: (d: string, options?: { toClockwise?: boolean }) => string
@@ -74,76 +75,33 @@ export function useSvgLoader() {
       defaultColor = '#FFA500',
       defaultDepth = 2,
       defaultStartZ = 0,
-      // drawStrokes = true,
+      drawStrokes = true,
       drawFillShapes = true,
       customShapes,
     } = options
 
-    const svgParsed = loader.parse(normalizePathDirections(svgData))
+    const markup = drawStrokes ? expandStrokes(svgData, loader, drawFillShapes) : svgData
     const shapes: ShapeWithColor[] = []
-
-    svgParsed.paths.forEach((path) => {
-      // 处理填充形状
-      if (drawFillShapes) {
+    if (markup && (drawStrokes || drawFillShapes)) {
+      const svgParsed = loader.parse(normalizePathDirections(markup))
+      for (const path of svgParsed.paths) {
         const style = path.userData?.style as { fill?: string, fillOpacity?: number } | undefined
         const fillColor = style?.fill || defaultColor
-        const fillOpacity = style?.fillOpacity ?? 1
+        if (fillColor === 'none')
+          continue
 
-        if (fillColor !== undefined && fillColor !== 'none') {
-          const pathShapes = path.toShapes()
-          pathShapes.forEach((shape) => {
-            shapes.push({
-              shape: markRaw(shape),
-              color: markRaw(new Color().setStyle(fillColor)),
-              startZ: defaultStartZ,
-              depth: defaultDepth,
-              opacity: fillOpacity,
-              polygonOffset: 0,
-            })
+        for (const shape of path.toShapes()) {
+          shapes.push({
+            shape: markRaw(shape),
+            color: markRaw(new Color().setStyle(fillColor)),
+            startZ: defaultStartZ,
+            depth: defaultDepth,
+            opacity: style?.fillOpacity ?? 1,
+            polygonOffset: 0,
           })
         }
       }
-
-      // TODO 描边处理
-      // 描边处理
-      // if (drawStrokes) {
-      //   const strokeColor = path.userData?.style?.stroke
-      //   if (strokeColor && strokeColor !== 'none') {
-      //     const strokeOpacity = path.userData?.style?.strokeOpacity ?? 1
-      //     // const strokeWidth = path.userData?.style?.strokeWidth ?? 1
-
-      //     path.subPaths.forEach((subPath) => {
-      //       if (!subPath || !subPath.getPoints || typeof subPath.getPoints !== 'function') return
-
-      //       const output: number[] = []
-      //       SVGLoader.pointsToStrokeWithBuffers(
-      //         subPath.getPoints(),
-      //         path.userData?.style,
-      //         undefined, undefined, output, [], []
-      //       )
-
-      //       if (output.length) {
-      //         const shape = new Shape()
-      //         for (let t = 0, T = output.length / 9; t < T; ++t) {
-      //           shape.moveTo(output[t * 9 + 0], output[t * 9 + 1]);
-      //           shape.lineTo(output[t * 9 + 3], output[t * 9 + 4]);
-      //           shape.lineTo(output[t * 9 + 6], output[t * 9 + 7]);
-      //           shape.lineTo(output[t * 9 + 0], output[t * 9 + 1]);
-      //         }
-
-      //         shapes.push({
-      //           shape: markRaw(shape),
-      //           color: markRaw(new Color().setStyle(strokeColor)),
-      //           startZ: defaultStartZ,
-      //           depth: defaultDepth,
-      //           opacity: strokeOpacity,
-      //           polygonOffset: 0,
-      //         })
-      //       }
-      //     })
-      //   }
-      // }
-    })
+    }
 
     return customShapes ? customShapes(shapes, 0) : shapes
   }
