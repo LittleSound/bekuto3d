@@ -23,12 +23,13 @@ interface SvgPathData {
 
 const svgNamespace = 'http://www.w3.org/2000/svg'
 
-/** Each use can give the same source geometry a different stroke width or paint. */
-function inlineUses(svg: string) {
+/** Each instance owns its paint; resolve its position using the loader's geometry units and DPI. */
+function inlineUses(svg: string, loader: SVGLoader) {
   if (!svg.includes('<use'))
     return svg
 
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
+  const serializer = new XMLSerializer()
   function expand(use: Element, ancestors: Set<Element>) {
     const href = use.getAttribute('href') || use.getAttribute('xlink:href')
     const target = href?.startsWith('#') && doc.getElementById(href.slice(1))
@@ -40,8 +41,11 @@ function inlineUses(svg: string) {
     for (const attr of Array.from(use.attributes))
       group.setAttributeNS(attr.namespaceURI, attr.name, attr.value)
 
-    const x = use.getAttribute('x') || '0'
-    const y = use.getAttribute('y') || '0'
+    const position = doc.createElementNS(svgNamespace, 'line')
+    position.setAttribute('x1', use.getAttribute('x') || '0')
+    position.setAttribute('y1', use.getAttribute('y') || '0')
+    const positionPath = loader.parse(`<svg xmlns="${svgNamespace}">${serializer.serializeToString(position)}</svg>`).paths[0]
+    const { x, y } = positionPath.subPaths[0].getPoints()[0]
     group.setAttribute('transform', `${use.getAttribute('transform') || ''} translate(${x} ${y})`)
     const copy = target.cloneNode(true) as Element
     group.append(copy)
@@ -55,19 +59,42 @@ function inlineUses(svg: string) {
     if (!use.closest('defs, symbol'))
       expand(use, new Set())
   }
-  return new XMLSerializer().serializeToString(doc.documentElement)
+  return serializer.serializeToString(doc.documentElement)
 }
 
+/** Normalize CSS colors before separating alpha, which Three.js Color would otherwise discard. */
 function resolvePaint(node: SVGElement, paint: string) {
-  if (paint.toLowerCase() !== 'currentcolor')
-    return paint
-
-  for (let element: Element | null = node; element; element = element.parentElement) {
-    const color = (element as SVGElement).style?.color || element.getAttribute('color')
-    if (color && !['currentcolor', 'inherit'].includes(color.toLowerCase()))
-      return color
+  if (paint.toLowerCase() === 'currentcolor') {
+    paint = 'black'
+    for (let element: Element | null = node; element; element = element.parentElement) {
+      const color = (element as SVGElement).style?.color || element.getAttribute('color')
+      if (color && !['currentcolor', 'inherit'].includes(color.toLowerCase())) {
+        paint = color
+        break
+      }
+    }
   }
-  return 'black'
+
+  const declaration = node.ownerDocument.createElementNS('http://www.w3.org/1999/xhtml', 'span').style
+  declaration.color = paint
+  const color = declaration.color || paint
+  const rgba = /^rgba\((.+),([^,]+)\)$/.exec(color)
+  return {
+    color: rgba ? `rgb(${rgba[1]})` : color,
+    opacity: ['none', 'transparent'].includes(color) ? 0 : rgba ? Number(rgba[2]) : 1,
+  }
+}
+
+/** Omitted paint operations follow the listed ones in their default fill/stroke/markers order. */
+function strokeBeforeFill(node: SVGElement) {
+  for (let element: Element | null = node; element; element = element.parentElement) {
+    const value = ((element as SVGElement).style?.getPropertyValue('paint-order') || element.getAttribute('paint-order'))?.trim()
+    if (!value || ['inherit', 'unset'].includes(value))
+      continue
+    const order = [...value.split(/\s+/), 'fill', 'stroke', 'markers']
+    return order.indexOf('stroke') < order.indexOf('fill')
+  }
+  return false
 }
 
 /** SVGLoader bakes transforms into points. Recover local geometry before applying stroke width. */
@@ -105,16 +132,17 @@ export function expandStrokes(svg: string, loader: SVGLoader, drawFills: boolean
   if (!/\bstroke\s*[:=]/i.test(svg))
     return drawFills ? svg : ''
 
-  const parsed = loader.parse(inlineUses(svg))
+  const parsed = loader.parse(inlineUses(svg, loader))
   const serializer = new XMLSerializer()
   for (const path of parsed.paths) {
     const { node, style, transform } = path.userData as unknown as SvgPathData
-    const strokeOpacity = (style.opacity ?? 1) * style.strokeOpacity
+    const strokePaint = resolvePaint(node, style.stroke || 'none')
+    const strokeOpacity = (style.opacity ?? 1) * style.strokeOpacity * strokePaint.opacity
     if (node.closest('[display="none"]') || (style.visibility === 'hidden' || style.visibility === 'collapse') || style.opacity === 0) {
       node.remove()
       continue
     }
-    if (!style.stroke || ['none', 'transparent'].includes(style.stroke) || style.strokeWidth <= 0 || strokeOpacity <= 0) {
+    if (style.strokeWidth <= 0 || strokeOpacity <= 0) {
       if (!drawFills)
         node.remove()
       continue
@@ -134,13 +162,23 @@ export function expandStrokes(svg: string, loader: SVGLoader, drawFills: boolean
     if (node.hasAttribute('transform'))
       group.setAttribute('transform', node.getAttribute('transform')!)
 
-    if (drawFills && !['none', 'transparent'].includes(style.fill) && style.fillOpacity > 0) {
+    const fillPaint = resolvePaint(node, style.fill)
+    const fillOpacity = (style.opacity ?? 1) * style.fillOpacity * fillPaint.opacity
+    let fill: MultiPolygon = []
+    if (drawFills && fillOpacity > 0) {
       const rings = lines.map(line => line.points).filter(points => points.length >= 3)
-      const fill = style.fillRule === 'evenodd' ? xorRings(rings) : nonzeroRings(rings)
-      const visible = strokeOpacity === 1 ? differenceMultiPolygons(fill, stroke) : fill
-      appendRegion(group, visible, resolvePaint(node, style.fill), (style.opacity ?? 1) * style.fillOpacity)
+      fill = style.fillRule === 'evenodd' ? xorRings(rings) : nonzeroRings(rings)
     }
-    appendRegion(group, stroke, resolvePaint(node, style.stroke), strokeOpacity)
+    const paints = [
+      { region: fill, color: fillPaint.color, opacity: fillOpacity },
+      { region: stroke, color: strokePaint.color, opacity: strokeOpacity },
+    ]
+    if (strokeBeforeFill(node))
+      paints.reverse()
+    if (paints[1].opacity === 1)
+      paints[0].region = differenceMultiPolygons(paints[0].region, paints[1].region)
+    for (const paint of paints)
+      appendRegion(group, paint.region, paint.color, paint.opacity)
     node.replaceWith(group)
   }
 
