@@ -25,3 +25,7 @@ Resolve local `href` and `xlink:href` chains with cycle protection. Honor percen
 Gradient references must survive stroke expansion. Do not cut away underlying geometry when any foreground gradient stop is translucent. Keep the original fill/stroke opacity separate from stop opacity while generating paths, avoiding double application. Manual solid overrides retain source data but no longer need a gradient warning.
 
 The [SVG paint-server specification](https://www.w3.org/TR/SVG2/pservers.html) defines gradient references, stop inheritance and offset behavior. Read definitions from the source DOM: the current Three.js gradient parser does not correctly normalize percentage stop offsets or inline style precedence.
+
+## Cross-platform component tests
+
+Keep root-relative public asset URLs as browser URLs during component tests. Turning `/logo-dark.svg` into a module import makes Vitest attempt to load a drive-less file URL on Windows before the editor tests can run. Configure this in `vite.config.ts` for Vitest only, preserving relative asset imports, TresJS template options and production asset handling. The editor regression suite must run on both Windows and Ubuntu.

@@ -31,6 +31,7 @@ describe('gradient color editing', () => {
   it('shows the fallback and warning, then keeps provenance after a manual color change', async () => {
     const { wrapper, shapes } = await mountEditor()
     try {
+      expect(wrapper.findAll('img').map(image => image.attributes('src'))).toEqual(['/logo-dark.svg', '/logo-light.svg'])
       expect(wrapper.findAll('summary')).toHaveLength(2)
       expect(wrapper.get<HTMLInputElement>('input[type="color"]').element.value).toBe('#800080')
       expect(wrapper.text()).toContain('Preview and 3MF use')
