@@ -8,7 +8,7 @@ const { createShapesWithColor } = useSvgLoader()
 type Options = Parameters<typeof createShapesWithColor>[1]
 
 function load(elements: string, options?: Options) {
-  return createShapesWithColor(`<svg xmlns="http://www.w3.org/2000/svg">${elements}</svg>`, options)
+  return createShapesWithColor(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">${elements}</svg>`, options)
 }
 
 function bounds(part: ReturnType<typeof load>[number]) {
@@ -79,6 +79,25 @@ describe('sVG stroke import', () => {
     expect(bounds(thick).min.y).toBeCloseTo(17)
   })
 
+  it.each(['90px', '1in', '25.4mm', '2.54cm', '72pt', '6pc'])('resolves use positions in %s before the instance transform', (x) => {
+    const [part] = load(`<defs><path id="line" d="M0 0L10 0" fill="none"/></defs>
+      <use xlink:href="#line" x="${x}" y="12pt" transform="translate(3 4) scale(2 3)" stroke="red" stroke-width="2"/>`)
+    const box = bounds(part)
+    expect(box.min.x).toBeCloseTo(183)
+    expect(box.max.x).toBeCloseTo(203)
+    expect(box.min.y).toBeCloseTo(46)
+    expect(box.max.y).toBeCloseTo(52)
+  })
+
+  it('resolves unit-bearing positions independently in nested instances', () => {
+    const [part] = load(`<defs>
+      <path id="line" d="M0 0L10 0" fill="none"/>
+      <g id="pair"><use href="#line" x="1in"/></g>
+    </defs><use href="#pair" x="1in" stroke="blue" stroke-width="2"/>`)
+    expect(bounds(part).min.x).toBeCloseTo(180)
+    expect(bounds(part).max.x).toBeCloseTo(190)
+  })
+
   it('keeps fill-only siblings and resolves inherited currentColor on stroke-only icons', () => {
     const parts = load(`<rect width="5" height="5" fill="blue"/>
       <g style="color:#123456" stroke="currentColor" fill="none">
@@ -93,6 +112,61 @@ describe('sVG stroke import', () => {
     const [disc, border] = load(circle.replace('stroke-width', 'stroke-opacity="0.4" stroke-width'))
     expect(bounds(disc).max.x).toBeCloseTo(400)
     expect(border.opacity).toBe(0.4)
+  })
+
+  it.each(['rgba(0,0,0,0)', 'hsla(0,0%,0%,0)', '#0000', '#00000000'])('omits an invisible %s stroke without cutting the fill', (stroke) => {
+    const svg = circle.replace('stroke="#000"', `stroke="${stroke}"`)
+    const parts = load(svg)
+    expect(parts).toHaveLength(1)
+    expect(parts[0].color.getHexString()).toBe('6d91ef')
+    expect(bounds(parts[0]).max.x).toBeCloseTo(400)
+    expect(load(svg, { drawFillShapes: false })).toEqual([])
+  })
+
+  it.each(['rgba(255,0,0,0.5)', 'hsla(0,100%,50%,0.5)', 'rgb(255 0 0 / 50%)', '#ff000080'])('combines %s alpha with the inherited stroke and element opacity', (stroke) => {
+    const [disc, border] = load(`<g opacity="0.5" stroke-opacity="0.4" color="${stroke}">
+      ${circle.replace('stroke="#000"', 'stroke="currentColor"')}
+    </g>`)
+    expect(bounds(disc).max.x).toBeCloseTo(400)
+    expect(disc.opacity).toBe(0.5)
+    expect(border.color.getHexString()).toBe('ff0000')
+    expect(border.opacity).toBeCloseTo(0.1, 2)
+  })
+
+  it.each(['paint-order="stroke fill"', 'paint-order="stroke"', 'style="paint-order:markers stroke"'])('keeps fill over stroke for %s', (order) => {
+    const [border, disc] = load(circle.replace('<circle', `<circle ${order}`))
+    expect([border.color.getHexString(), disc.color.getHexString()]).toEqual(['000000', '6d91ef'])
+    expect(bounds(disc).max.x).toBeCloseTo(400)
+    const holeArea = Math.abs(ShapeUtils.area(border.shape.holes[0].getPoints()))
+    expect(holeArea / Math.abs(ShapeUtils.area(disc.shape.getPoints()))).toBeCloseTo(1, 6)
+  })
+
+  it('inherits paint order and allows inline normal to override a presentation attribute', () => {
+    const [border, disc] = load(`<g style="paint-order:stroke">${circle}</g>`)
+    expect(border.color.getHexString()).toBe('000000')
+    expect(bounds(disc).max.x).toBeCloseTo(400)
+    const [resetDisc, resetBorder] = load(`<g paint-order="stroke">${circle.replace('<circle', '<circle paint-order="stroke" style="paint-order:normal"')}</g>`)
+    expect(resetDisc.color.getHexString()).toBe('6d91ef')
+    expect(bounds(resetDisc).max.x).toBeCloseTo(368, 0)
+    expect(resetBorder.color.getHexString()).toBe('000000')
+  })
+
+  it('keeps the underlying stroke beneath a translucent foreground fill', () => {
+    const [border, disc] = load(circle.replace('fill="#6d91ef"', 'fill="rgba(0,0,255,0.5)" paint-order="stroke"'))
+    expect(border.color.getHexString()).toBe('000000')
+    expect(disc.color.getHexString()).toBe('0000ff')
+    expect(disc.opacity).toBe(0.5)
+    expect(bounds(disc).max.x).toBeCloseTo(400)
+    expect(Math.max(...border.shape.holes[0].getPoints().map(point => point.x))).toBeCloseTo(368, 0)
+  })
+
+  it('does not cut strokes with disabled or invisible foreground fills', () => {
+    const svg = circle.replace('<circle', '<circle paint-order="stroke"')
+    for (const parts of [load(svg, { drawFillShapes: false }), load(svg.replace('fill="#6d91ef"', 'fill="rgba(0,0,255,0)"'))]) {
+      expect(parts).toHaveLength(1)
+      expect(parts[0].color.getHexString()).toBe('000000')
+      expect(Math.max(...parts[0].shape.holes[0].getPoints().map(point => point.x))).toBeCloseTo(368, 0)
+    }
   })
 
   it('honors independent fill and stroke options', () => {
