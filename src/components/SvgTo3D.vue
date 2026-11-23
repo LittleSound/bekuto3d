@@ -368,16 +368,13 @@ function batchEditNumericProperty(
   }
 }
 
-/** Handles color change with batch support - applies same color to all selected shapes */
+/** Apply an explicit solid color to the selection without discarding the original gradient data. */
 function handleColorChange(index: number, color: string) {
   const newColor = new Color().setStyle(color)
-  if (shouldBatchEdit(index)) {
-    for (const i of selectedShapeIndices.value) {
-      svgShapes.value[i].color = newColor.clone()
-    }
-  }
-  else {
-    svgShapes.value[index].color = newColor
+  const indices = shouldBatchEdit(index) ? selectedShapeIndices.value : [index]
+  for (const i of indices) {
+    svgShapes.value[i].color = markRaw(newColor.clone())
+    svgShapes.value[i].colorOverridden = true
   }
 }
 
@@ -600,6 +597,7 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
             >
               <input
                 type="color"
+                :aria-label="`Color for shape ${index + 1}`"
                 :value="`#${item.color.getHexString()}`"
                 class="op0 inset-0 absolute z--1"
                 @input="handleColorChange(index, ($event.target as HTMLInputElement).value)"
@@ -608,6 +606,29 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
               >
             </label>
             <pre min-w-5>{{ index + 1 }}</pre>
+            <details v-if="item.sourceGradient && !item.colorOverridden" class="left-3 top-1 absolute">
+              <summary
+                class="text-amber-700 list-none rounded bg-amber-100 cursor-pointer dark:text-amber-200 dark:bg-amber-950 [&::-webkit-details-marker]:hidden"
+                :aria-label="`Gradient warning for shape ${index + 1}`"
+                :title="`Gradient approximated as #${item.color.getHexString()}. Click for printing details.`"
+              >
+                <span class="i-carbon-warning-alt size-4 block" aria-hidden="true" />
+              </summary>
+              <div class="text-sm text-gray-900 p-3 border border-amber-400 rounded bg-white w-64 shadow-lg left--3 top-6 absolute z-10 dark:text-gray-100 dark:bg-gray-900">
+                <p>
+                  This gradient cannot be printed as a gradient in 3MF.
+                  Preview and 3MF use the approximate solid color #{{ item.color.getHexString() }}.
+                  Choose a color to replace it.
+                </p>
+                <button
+                  type="button"
+                  class="text-sm mt-2 px-2 py-1 rounded bg-amber-100 cursor-pointer dark:bg-amber-900"
+                  @click="handleColorChange(index, `#${item.color.getHexString()}`)"
+                >
+                  Use this solid color
+                </button>
+              </div>
+            </details>
           </div>
           <IconInput
             :ref="el => inputRefs[index] = (el as any)"

@@ -1,5 +1,13 @@
 import type { Color, Shape } from 'three'
 
+export interface SvgGradient {
+  id: string
+  type: 'linearGradient' | 'radialGradient'
+  reference: string
+  definitions: string[]
+  stops: { offset: number, color: string, opacity: number }[]
+}
+
 export interface ShapeWithColor {
   shape: Shape
   color: Color
@@ -7,4 +15,7 @@ export interface ShapeWithColor {
   depth: number
   startZ: number
   polygonOffset: number
+  /** Source data survives solid-color overrides; rendering and export always use color. */
+  sourceGradient?: SvgGradient
+  colorOverridden?: boolean
 }
