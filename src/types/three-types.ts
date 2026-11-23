@@ -15,7 +15,7 @@ export interface ShapeWithColor {
   depth: number
   startZ: number
   polygonOffset: number
-  /** Source data survives solid-color overrides; rendering and export always use color. */
+  /** Retained for print-color edits; cleared when the user replaces the paint with a solid color. */
   sourceGradient?: SvgGradient
   colorOverridden?: boolean
   /** A selected point on the saved ramp; absent for automatic or arbitrary custom colors. */

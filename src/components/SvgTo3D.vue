@@ -375,7 +375,7 @@ function colorSwatchBackground(item: ShapeWithColor) {
   return item.sourceGradient ? getGradientBackground(item.sourceGradient) : `#${item.color.getHexString()}`
 }
 
-/** Apply an explicit solid color to the selection without discarding the original gradient data. */
+/** The square swatch replaces the selected shapes' paint, ending any gradient editing state. */
 function handleColorChange(index: number, color: string) {
   const newColor = new Color().setStyle(color)
   const indices = shouldBatchEdit(index) ? selectedShapeIndices.value : [index]
@@ -383,6 +383,7 @@ function handleColorChange(index: number, color: string) {
     svgShapes.value[i].color = markRaw(newColor.clone())
     svgShapes.value[i].colorOverridden = true
     svgShapes.value[i].gradientPosition = undefined
+    svgShapes.value[i].sourceGradient = undefined
   }
 }
 
@@ -392,11 +393,13 @@ function handleGradientColorChange(index: number, position: number) {
   if (!gradient)
     return
   position = clampNumber(position, 0, 1)
-  handleColorChange(index, getGradientPaint(gradient, position).color)
+  const color = new Color(getGradientPaint(gradient, position).color)
   const indices = shouldBatchEdit(index) ? selectedShapeIndices.value : [index]
   for (const i of indices) {
-    if (svgShapes.value[i].sourceGradient?.id === gradient.id)
-      svgShapes.value[i].gradientPosition = position
+    const item = svgShapes.value[i]
+    item.color = markRaw(color.clone())
+    item.colorOverridden = true
+    item.gradientPosition = item.sourceGradient?.id === gradient.id ? position : undefined
   }
 }
 
@@ -628,7 +631,7 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
             <div class="shape-identity" :title="`Shape ${index + 1}`" @click="handleInputAreaClick(index, $event)">
               <label
                 class="shape-swatch"
-                :title="item.sourceGradient ? 'Original gradient — choose a custom print color' : `Color: #${item.color.getHexString()}`"
+                :title="item.sourceGradient ? 'Original gradient — replace with a solid color' : `Color: #${item.color.getHexString()}`"
                 :style="{ background: colorSwatchBackground(item) }"
               >
                 <input

@@ -32,22 +32,28 @@ async function mountEditor(gradientType = 'linearGradient', stops = '<stop stop-
 }
 
 describe('gradient color editing', () => {
-  it('keeps source swatches and print-color controls after a custom color change', async () => {
-    const { wrapper, shapes } = await mountEditor()
+  it.each(['linear', 'radial'])('replaces a %s gradient with solid paint through the square swatch', async (type) => {
+    const { wrapper, shapes } = await mountEditor(`${type}Gradient`)
     try {
       expect(wrapper.findAll('img').map(image => image.attributes('src'))).toEqual(['/logo-dark.svg', '/logo-light.svg'])
       expect(wrapper.findAll('summary')).toHaveLength(2)
       expect(wrapper.get<HTMLInputElement>('input[type="color"]').element.value).toBe('#800080')
-      expect(wrapper.get('label').attributes('style')).toContain('linear-gradient(')
+      expect(wrapper.get('label').attributes('style')).toContain(`${type}-gradient(`)
       expect(wrapper.text()).toContain('3D preview and 3MF use')
       const source = shapes()[0].sourceGradient
+      await wrapper.get('input[type="range"]').setValue('0.25')
       await wrapper.get('input[type="color"]').setValue('#123456')
       expect(shapes()[0].color.getHexString()).toBe('123456')
-      expect(shapes()[0].sourceGradient).toBe(source)
+      expect(shapes()[0].sourceGradient).toBeUndefined()
+      expect(shapes()[0].gradientPosition).toBeUndefined()
       expect(shapes()[0].colorOverridden).toBe(true)
-      expect(wrapper.get('label').attributes('style')).toContain('gradient(')
-      expect(wrapper.findAll('summary')).toHaveLength(2)
-      expect(wrapper.get('summary').text()).toContain('123456')
+      expect(wrapper.get('label').element.style.background).toBe('rgb(18, 52, 86)')
+      expect(wrapper.find('summary[aria-label="Print color for shape 1"]').exists()).toBe(false)
+      expect(wrapper.find('input[aria-label="Gradient color for shape 1"]').exists()).toBe(false)
+      expect(wrapper.findAll('summary')).toHaveLength(1)
+      expect(shapes()[1].sourceGradient).toEqual(source)
+      expect(shapes()[1].color.getHexString()).toBe('800080')
+      expect(wrapper.findAll('label')[1].attributes('style')).toContain(`${type}-gradient(`)
     }
     finally {
       wrapper.unmount()
@@ -120,14 +126,17 @@ describe('gradient color editing', () => {
       const inputs = wrapper.findAll('input[type="color"]')
       await inputs[0].trigger('click')
       await inputs[1].trigger('click', { ctrlKey: true })
-      await inputs[0].setValue('#abcdef')
-      expect(shapes().map(shape => shape.color.getHexString())).toEqual(['abcdef', 'abcdef', '008000'])
-      expect(shapes().slice(0, 2).every(shape => shape.sourceGradient && shape.colorOverridden)).toBe(true)
-      expect(wrapper.findAll('summary')).toHaveLength(2)
-      expect(wrapper.findAll('input[type="range"]')).toHaveLength(2)
       await wrapper.get('input[type="range"]').setValue('0.25')
       expect(shapes().slice(0, 2).map(shape => shape.color.getHexString())).toEqual(['bf0040', 'bf0040'])
       expect(shapes().slice(0, 2).map(shape => shape.gradientPosition)).toEqual([0.25, 0.25])
+      expect(shapes().slice(0, 2).every(shape => shape.sourceGradient && shape.colorOverridden)).toBe(true)
+      expect(wrapper.findAll('summary')).toHaveLength(2)
+      await inputs[0].setValue('#abcdef')
+      expect(shapes().map(shape => shape.color.getHexString())).toEqual(['abcdef', 'abcdef', '008000'])
+      expect(shapes().slice(0, 2).every(shape => !shape.sourceGradient && shape.gradientPosition === undefined)).toBe(true)
+      expect(wrapper.findAll('.shape-swatch').slice(0, 2).map(swatch => (swatch.element as HTMLElement).style.background)).toEqual(['rgb(171, 205, 239)', 'rgb(171, 205, 239)'])
+      expect(wrapper.findAll('summary')).toHaveLength(0)
+      expect(wrapper.findAll('input[type="range"]')).toHaveLength(0)
     }
     finally {
       wrapper.unmount()
@@ -153,19 +162,22 @@ describe('gradient color editing', () => {
     }
   })
 
-  it('exports the slider-selected color that is passed to the 3D renderer', async () => {
+  it.each([
+    { input: 'range', value: '0.75', color: '#4000bf', sourceId: 'g' },
+    { input: 'color', value: '#123456', color: '#123456', sourceId: undefined },
+  ])('exports the $input selection that is passed to the 3D renderer', async ({ input, value, color, sourceId }) => {
     const { wrapper, shapes } = await mountEditor()
     let geometry: ExtrudeGeometry | undefined
     let material: MeshPhongMaterial | undefined
     try {
-      await wrapper.get('input[type="range"]').setValue('0.75')
+      await wrapper.get(`input[type="${input}"]`).setValue(value)
       const part = shapes()[0]
       geometry = new ExtrudeGeometry(part.shape, { depth: part.depth, bevelEnabled: false })
       material = new MeshPhongMaterial({ color: part.color })
       const archive = await JSZip.loadAsync(await exportTo3MF(new Group().add(new Mesh(geometry, material))))
       const settings = JSON.parse(await archive.file('Metadata/project_settings.config')!.async('string'))
-      expect(settings.filament_colour[0]).toBe('#4000bf')
-      expect(part.sourceGradient?.id).toBe('g')
+      expect(settings.filament_colour[0]).toBe(color)
+      expect(part.sourceGradient?.id).toBe(sourceId)
     }
     finally {
       geometry?.dispose()
