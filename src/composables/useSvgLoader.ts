@@ -3,6 +3,7 @@ import fixPathDirections from 'fix-path-directions'
 import { Color } from 'three'
 import { SVGLoader } from 'three/addons/loaders/SVGLoader.js'
 import { expandStrokes } from '../svg/expandStrokes'
+import { resolveSvgPaint } from '../svg/paint'
 
 const { getFixedPathDataString } = fixPathDirections as {
   getFixedPathDataString: (d: string, options?: { toClockwise?: boolean }) => string
@@ -85,18 +86,21 @@ export function useSvgLoader() {
     if (markup && (drawStrokes || drawFillShapes)) {
       const svgParsed = loader.parse(normalizePathDirections(markup))
       for (const path of svgParsed.paths) {
-        const style = path.userData?.style as { fill?: string, fillOpacity?: number } | undefined
+        const style = path.userData?.style as { fill?: string, fillOpacity?: number, opacity?: number } | undefined
         const fillColor = style?.fill || defaultColor
-        if (fillColor === 'none')
+        const paint = resolveSvgPaint(path.userData!.node as SVGElement, fillColor, defaultColor)
+        const opacity = (style?.fillOpacity ?? 1) * (style?.opacity ?? 1) * paint.opacity
+        if (opacity <= 0)
           continue
 
         for (const shape of path.toShapes()) {
           shapes.push({
             shape: markRaw(shape),
-            color: markRaw(new Color().setStyle(fillColor)),
+            color: markRaw(new Color().setStyle(paint.color)),
+            sourceGradient: paint.gradient ? markRaw(paint.gradient) : undefined,
             startZ: defaultStartZ,
             depth: defaultDepth,
-            opacity: style?.fillOpacity ?? 1,
+            opacity,
             polygonOffset: 0,
           })
         }

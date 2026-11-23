@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     FileDropZone: typeof import('./src/components/FileDropZone.vue')['default']
+    GradientPrintColor: typeof import('./src/components/GradientPrintColor.vue')['default']
     IconInput: typeof import('./src/components/IconInput.vue')['default']
     ModelExporter: typeof import('./src/components/ModelExporter.vue')['default']
     ModelRenderer: typeof import('./src/components/ModelRenderer.vue')['default']

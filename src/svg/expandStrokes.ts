@@ -2,6 +2,7 @@ import type { Matrix3, ShapePath } from 'three'
 import type { SVGLoader } from 'three/addons/loaders/SVGLoader.js'
 import type { MultiPolygon, Point, Polyline, StrokeStyle } from 'unstroke'
 import { differenceMultiPolygons, multiPolygonToPathData, nonzeroRings, strokePolyline, unionRings, xorRings } from 'unstroke'
+import { resolveSvgPaint } from './paint'
 
 interface SvgPathData {
   node: SVGElement
@@ -62,29 +63,6 @@ function inlineUses(svg: string, loader: SVGLoader) {
   return serializer.serializeToString(doc.documentElement)
 }
 
-/** Normalize CSS colors before separating alpha, which Three.js Color would otherwise discard. */
-function resolvePaint(node: SVGElement, paint: string) {
-  if (paint.toLowerCase() === 'currentcolor') {
-    paint = 'black'
-    for (let element: Element | null = node; element; element = element.parentElement) {
-      const color = (element as SVGElement).style?.color || element.getAttribute('color')
-      if (color && !['currentcolor', 'inherit'].includes(color.toLowerCase())) {
-        paint = color
-        break
-      }
-    }
-  }
-
-  const declaration = node.ownerDocument.createElementNS('http://www.w3.org/1999/xhtml', 'span').style
-  declaration.color = paint
-  const color = declaration.color || paint
-  const rgba = /^rgba\((.+),([^,]+)\)$/.exec(color)
-  return {
-    color: rgba ? `rgb(${rgba[1]})` : color,
-    opacity: ['none', 'transparent'].includes(color) ? 0 : rgba ? Number(rgba[2]) : 1,
-  }
-}
-
 /** Omitted paint operations follow the listed ones in their default fill/stroke/markers order. */
 function strokeBeforeFill(node: SVGElement) {
   for (let element: Element | null = node; element; element = element.parentElement) {
@@ -116,12 +94,14 @@ function localPolylines(path: ShapePath, node: SVGElement, loader: SVGLoader): P
   }).filter(line => line.points.length > 0)
 }
 
+/** Generated paths carry combined paint opacity, so reset the loader's inherited element opacity. */
 function appendRegion(group: Element, region: MultiPolygon, color: string, opacity: number) {
   for (const polygon of region) {
     const path = group.ownerDocument.createElementNS(svgNamespace, 'path')
     path.setAttribute('d', multiPolygonToPathData([polygon], { curves: false, precision: 8 }))
     path.setAttribute('fill', color)
     path.setAttribute('fill-opacity', String(opacity))
+    path.setAttribute('opacity', '1')
     path.setAttribute('fill-rule', 'evenodd')
     group.append(path)
   }
@@ -136,7 +116,7 @@ export function expandStrokes(svg: string, loader: SVGLoader, drawFills: boolean
   const serializer = new XMLSerializer()
   for (const path of parsed.paths) {
     const { node, style, transform } = path.userData as unknown as SvgPathData
-    const strokePaint = resolvePaint(node, style.stroke || 'none')
+    const strokePaint = resolveSvgPaint(node, style.stroke || 'none')
     const strokeOpacity = (style.opacity ?? 1) * style.strokeOpacity * strokePaint.opacity
     if (node.closest('[display="none"]') || (style.visibility === 'hidden' || style.visibility === 'collapse') || style.opacity === 0) {
       node.remove()
@@ -162,7 +142,7 @@ export function expandStrokes(svg: string, loader: SVGLoader, drawFills: boolean
     if (node.hasAttribute('transform'))
       group.setAttribute('transform', node.getAttribute('transform')!)
 
-    const fillPaint = resolvePaint(node, style.fill)
+    const fillPaint = resolveSvgPaint(node, style.fill)
     const fillOpacity = (style.opacity ?? 1) * style.fillOpacity * fillPaint.opacity
     let fill: MultiPolygon = []
     if (drawFills && fillOpacity > 0) {
@@ -170,12 +150,12 @@ export function expandStrokes(svg: string, loader: SVGLoader, drawFills: boolean
       fill = style.fillRule === 'evenodd' ? xorRings(rings) : nonzeroRings(rings)
     }
     const paints = [
-      { region: fill, color: fillPaint.color, opacity: fillOpacity },
-      { region: stroke, color: strokePaint.color, opacity: strokeOpacity },
+      { region: fill, color: fillPaint.gradient ? style.fill : fillPaint.color, opacity: fillOpacity, opaque: fillPaint.opaque },
+      { region: stroke, color: strokePaint.gradient ? style.stroke! : strokePaint.color, opacity: strokeOpacity, opaque: strokePaint.opaque },
     ]
     if (strokeBeforeFill(node))
       paints.reverse()
-    if (paints[1].opacity === 1)
+    if (paints[1].opacity === 1 && paints[1].opaque)
       paints[0].region = differenceMultiPolygons(paints[0].region, paints[1].region)
     for (const paint of paints)
       appendRegion(group, paint.region, paint.color, paint.opacity)

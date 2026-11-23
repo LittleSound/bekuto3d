@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 
 import path from 'node:path'
+import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { templateCompilerOptions } from '@tresjs/core'
 import Vue from '@vitejs/plugin-vue'
@@ -38,7 +39,10 @@ export default defineConfig({
         propsDestructure: true,
         defineModel: true,
       },
-      ...templateCompilerOptions,
+      template: {
+        ...templateCompilerOptions.template,
+        transformAssetUrls: process.env.VITEST ? { includeAbsolute: false } : undefined,
+      },
     }),
 
     // https://router.vuejs.org/file-based-routing/
