@@ -2,7 +2,9 @@
 
 ## Behavior
 
-The editor previews the same solid colors that the 3MF exporter uses. Import linear and radial gradients as an approximate solid color, retain their source definitions, and show a warning on each affected shape. Choosing a color (including explicitly accepting the approximation) makes that shape a solid-color override and dismisses its warning. Batch color edits follow the existing selection behavior.
+The 3D preview uses the same solid colors that the 3MF exporter uses. Import linear and radial gradients as an approximate solid color, retain their source definitions, and show a warning on each affected shape. The shape-list swatch displays the saved gradient's colors, stop positions and opacity, using a horizontal linear ramp or a centered radial ramp. This compact swatch identifies the source paint; it does not reproduce the gradient's spatial mapping over the shape. Choosing a color (including explicitly accepting the approximation) switches the swatch to that solid color and dismisses its warning. Batch color edits follow the existing selection behavior.
+
+Keep the warning badge larger than its icon, with visible space around the icon and separation from the shape number. Its disclosure describes the solid color used by the 3D preview and export. The color picker starts from that printable approximation even while its swatch shows the original gradient.
 
 ## Key locations
 

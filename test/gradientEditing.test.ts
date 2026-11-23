@@ -9,14 +9,14 @@ vi.mock('../src/components/ModelRenderer.vue', () => ({
 
 afterEach(() => vi.unstubAllGlobals())
 
-async function mountEditor() {
+async function mountEditor(gradientType = 'linearGradient', stops = '<stop stop-color="red"/><stop offset="1" stop-color="blue"/>') {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ text: async () => '<svg/>' }))
   const wrapper = mount(SvgTo3D, {
     global: { stubs: { FileDropZone: true, ModelExporter: true } },
   })
   await flushPromises()
   await wrapper.get('textarea').setValue(`<svg width="30" height="10" xmlns="http://www.w3.org/2000/svg">
-    <defs><linearGradient id="g"><stop stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient></defs>
+    <defs><${gradientType} id="g">${stops}</${gradientType}></defs>
     <rect width="10" height="10" fill="url(#g)"/>
     <rect x="10" width="10" height="10" fill="url(#g)"/>
     <rect x="20" width="10" height="10" fill="green"/>
@@ -34,12 +34,14 @@ describe('gradient color editing', () => {
       expect(wrapper.findAll('img').map(image => image.attributes('src'))).toEqual(['/logo-dark.svg', '/logo-light.svg'])
       expect(wrapper.findAll('summary')).toHaveLength(2)
       expect(wrapper.get<HTMLInputElement>('input[type="color"]').element.value).toBe('#800080')
-      expect(wrapper.text()).toContain('Preview and 3MF use')
+      expect(wrapper.get('label').attributes('style')).toContain('linear-gradient(')
+      expect(wrapper.text()).toContain('3D preview and 3MF use')
       const source = shapes()[0].sourceGradient
       await wrapper.get('input[type="color"]').setValue('#123456')
       expect(shapes()[0].color.getHexString()).toBe('123456')
       expect(shapes()[0].sourceGradient).toBe(source)
       expect(shapes()[0].colorOverridden).toBe(true)
+      expect(wrapper.get('label').attributes('style')).not.toContain('gradient(')
       expect(wrapper.findAll('summary')).toHaveLength(1)
     }
     finally {
@@ -54,7 +56,23 @@ describe('gradient color editing', () => {
       expect(shapes()[0].color.getHexString()).toBe('800080')
       expect(shapes()[0].colorOverridden).toBe(true)
       expect(shapes()[0].sourceGradient?.id).toBe('g')
+      expect(wrapper.get('label').attributes('style')).not.toContain('gradient(')
       expect(wrapper.findAll('summary')).toHaveLength(1)
+    }
+    finally {
+      wrapper.unmount()
+    }
+  })
+
+  it.each(['linear', 'radial'])('shows saved %s gradient stops in the swatch while retaining the printable material color', async (type) => {
+    const { wrapper, shapes } = await mountEditor(`${type}Gradient`, '<stop offset="25%" stop-color="red" stop-opacity="0.5"/><stop offset="75%" stop-color="blue"/>')
+    try {
+      const style = wrapper.get('label').attributes('style')!
+      expect(style).toContain(`${type}-gradient(`)
+      expect(style).toContain('rgba(255, 0, 0, 0.5) 25%')
+      expect(style).toContain('rgb(0, 0, 255) 75%')
+      expect(shapes()[0].color.getHexString()).toBe('5500aa')
+      expect(wrapper.get<HTMLInputElement>('input[type="color"]').element.value).toBe('#5500aa')
     }
     finally {
       wrapper.unmount()

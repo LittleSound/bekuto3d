@@ -368,6 +368,23 @@ function batchEditNumericProperty(
   }
 }
 
+/** Identify the source paint in the list while the material and color picker keep the printable color. */
+function colorSwatchBackground(item: ShapeWithColor) {
+  const gradient = item.colorOverridden ? undefined : item.sourceGradient
+  if (!gradient?.stops.length)
+    return `#${item.color.getHexString()}`
+
+  const stops = gradient.stops.map(({ color, opacity, offset }) =>
+    `${color}${Math.round(opacity * 255).toString(16).padStart(2, '0')} ${offset * 100}%`,
+  )
+  if (stops.length === 1)
+    stops.push(stops[0])
+
+  return gradient.type === 'radialGradient'
+    ? `radial-gradient(circle, ${stops.join(', ')})`
+    : `linear-gradient(to right, ${stops.join(', ')})`
+}
+
 /** Apply an explicit solid color to the selection without discarding the original gradient data. */
 function handleColorChange(index: number, color: string) {
   const newColor = new Color().setStyle(color)
@@ -589,11 +606,11 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
           @mouseleave="hoverShapeIndex = null"
           @click="selectAndFocus(index, $event)"
         >
-          <div flex="~ gap-2 items-center py-3" relative :title="`Shape ${index + 1}`" @click="handleInputAreaClick(index, $event)">
+          <div flex="~ gap-3 items-center py-3" relative :title="`Shape ${index + 1}`" @click="handleInputAreaClick(index, $event)">
             <label
-              class="border rounded h-5 min-h-5 min-w-5 w-5 cursor-pointer transition-all duration-200 has-focus:scale-120 has-hover:scale-110"
-              :title="`Color: #${item.color.getHexString()}`"
-              :style="{ background: `#${item.color.getHexString()}` }"
+              class="border rounded h-6 min-h-6 min-w-6 w-6 cursor-pointer transition-all duration-200 has-focus:scale-120 has-hover:scale-110"
+              :title="item.sourceGradient && !item.colorOverridden ? `Original gradient; printable color: #${item.color.getHexString()}` : `Color: #${item.color.getHexString()}`"
+              :style="{ background: colorSwatchBackground(item) }"
             >
               <input
                 type="color"
@@ -606,18 +623,18 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
               >
             </label>
             <pre min-w-5>{{ index + 1 }}</pre>
-            <details v-if="item.sourceGradient && !item.colorOverridden" class="left-3 top-1 absolute">
+            <details v-if="item.sourceGradient && !item.colorOverridden" class="left-4 top-0.5 absolute">
               <summary
-                class="text-amber-700 list-none rounded bg-amber-100 cursor-pointer dark:text-amber-200 dark:bg-amber-950 [&::-webkit-details-marker]:hidden"
+                class="text-amber-700 list-none rounded-full bg-amber-100 flex size-5 cursor-pointer items-center justify-center dark:text-amber-200 dark:bg-amber-950 [&::-webkit-details-marker]:hidden"
                 :aria-label="`Gradient warning for shape ${index + 1}`"
                 :title="`Gradient approximated as #${item.color.getHexString()}. Click for printing details.`"
               >
-                <span class="i-carbon-warning-alt size-4 block" aria-hidden="true" />
+                <span class="i-carbon-warning-alt size-3 block" aria-hidden="true" />
               </summary>
-              <div class="text-sm text-gray-900 p-3 border border-amber-400 rounded bg-white w-64 shadow-lg left--3 top-6 absolute z-10 dark:text-gray-100 dark:bg-gray-900">
+              <div class="text-sm text-gray-900 p-3 border border-amber-400 rounded bg-white w-64 shadow-lg left--4 top-6 absolute z-10 dark:text-gray-100 dark:bg-gray-900">
                 <p>
                   This gradient cannot be printed as a gradient in 3MF.
-                  Preview and 3MF use the approximate solid color #{{ item.color.getHexString() }}.
+                  3D preview and 3MF use the approximate solid color #{{ item.color.getHexString() }}.
                   Choose a color to replace it.
                 </p>
                 <button
