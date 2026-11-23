@@ -59,7 +59,6 @@ function close() {
           max="1"
           step="0.001"
           :value="shape.gradientPosition ?? 0.5"
-          :data-selected="shape.gradientPosition !== undefined"
           :aria-label="`Gradient color for shape ${shapeNumber}`"
           :aria-valuetext="shape.gradientPosition === undefined ? 'Choose a point on the original gradient' : `${mode}, ${color}`"
           @input="selectPosition"
@@ -192,7 +191,7 @@ function close() {
 
 .gradient-track {
   position: absolute;
-  inset: 10px 9px;
+  inset: 10px;
   border-radius: 6px;
   box-shadow: inset 0 0 0 1px #0000000a;
 }
@@ -222,35 +221,28 @@ function close() {
 
 .gradient-slider input::-webkit-slider-thumb {
   appearance: none;
-  width: 18px;
-  height: 18px;
-  margin-top: -3px;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  margin-top: -4px;
   border: 3px solid white;
   border-radius: 50%;
   background: var(--thumb-color);
   box-shadow:
-    0 0 0 1px #18362640,
-    0 2px 5px #00000020;
+    0 0 0 1px #15292299,
+    0 2px 5px #00000040;
 }
 
 .gradient-slider input::-moz-range-thumb {
   box-sizing: border-box;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border: 3px solid white;
   border-radius: 50%;
   background: var(--thumb-color);
   box-shadow:
-    0 0 0 1px #18362640,
-    0 2px 5px #00000020;
-}
-
-.gradient-slider input[data-selected='false']:not(:hover):not(:focus-visible)::-webkit-slider-thumb {
-  opacity: 0;
-}
-
-.gradient-slider input[data-selected='false']:not(:hover):not(:focus-visible)::-moz-range-thumb {
-  opacity: 0;
+    0 0 0 1px #15292299,
+    0 2px 5px #00000040;
 }
 
 .gradient-slider input:focus-visible {
