@@ -4,7 +4,9 @@ import potrace from 'potrace'
 import { Color } from 'three'
 import { useModelSize } from '../composables/useModelSize'
 import { useSvgLoader } from '../composables/useSvgLoader'
+import { getGradientBackground, getGradientPaint } from '../svg/gradient'
 import FileDropZone from './FileDropZone.vue'
+import GradientPrintColor from './GradientPrintColor.vue'
 import IconInput from './IconInput.vue'
 import ModelExporter from './ModelExporter.vue'
 import ModelRenderer from './ModelRenderer.vue'
@@ -370,19 +372,7 @@ function batchEditNumericProperty(
 
 /** Identify the source paint in the list while the material and color picker keep the printable color. */
 function colorSwatchBackground(item: ShapeWithColor) {
-  const gradient = item.colorOverridden ? undefined : item.sourceGradient
-  if (!gradient?.stops.length)
-    return `#${item.color.getHexString()}`
-
-  const stops = gradient.stops.map(({ color, opacity, offset }) =>
-    `${color}${Math.round(opacity * 255).toString(16).padStart(2, '0')} ${offset * 100}%`,
-  )
-  if (stops.length === 1)
-    stops.push(stops[0])
-
-  return gradient.type === 'radialGradient'
-    ? `radial-gradient(circle, ${stops.join(', ')})`
-    : `linear-gradient(to right, ${stops.join(', ')})`
+  return item.sourceGradient ? getGradientBackground(item.sourceGradient) : `#${item.color.getHexString()}`
 }
 
 /** Apply an explicit solid color to the selection without discarding the original gradient data. */
@@ -392,6 +382,34 @@ function handleColorChange(index: number, color: string) {
   for (const i of indices) {
     svgShapes.value[i].color = markRaw(newColor.clone())
     svgShapes.value[i].colorOverridden = true
+    svgShapes.value[i].gradientPosition = undefined
+  }
+}
+
+/** Match batch color editing while retaining a meaningful position only on the same source ramp. */
+function handleGradientColorChange(index: number, position: number) {
+  const gradient = svgShapes.value[index].sourceGradient
+  if (!gradient)
+    return
+  position = clampNumber(position, 0, 1)
+  handleColorChange(index, getGradientPaint(gradient, position).color)
+  const indices = shouldBatchEdit(index) ? selectedShapeIndices.value : [index]
+  for (const i of indices) {
+    if (svgShapes.value[i].sourceGradient?.id === gradient.id)
+      svgShapes.value[i].gradientPosition = position
+  }
+}
+
+/** Each selected gradient regains its own automatic color; solid shapes have no source approximation. */
+function resetGradientColor(index: number) {
+  const indices = shouldBatchEdit(index) ? selectedShapeIndices.value : [index]
+  for (const i of indices) {
+    const item = svgShapes.value[i]
+    if (!item.sourceGradient)
+      continue
+    item.color = markRaw(new Color(getGradientPaint(item.sourceGradient).color))
+    item.colorOverridden = false
+    item.gradientPosition = undefined
   }
 }
 
@@ -588,93 +606,81 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
         <div flex-1 />
         <div>unit: <span text-blue>mm</span></div>
       </div>
-      <div flex="~ col">
+      <div class="shape-list">
+        <div class="shape-list-heading">
+          <span>Shapes</span>
+          <span class="shape-count">{{ svgShapes.length }} parts</span>
+        </div>
         <div
           v-for="(item, index) in svgShapes"
           :key="index"
-          flex="~ gap-4"
-          class="px-2 border rounded cursor-pointer select-none transition-colors duration-200"
-          :class="[
-            selectedShapeIndices.has(index) || editingInputIndex === index
-              ? 'dark:border-white border-black'
-              : hoverShapeIndex === index
-                ? 'border-gray-500/50'
-                : 'border-transparent hover:border-gray-500/50',
-            item.depth === 0 ? 'op-50' : '',
-          ]"
+          class="shape-row"
+          :class="{
+            'is-active': selectedShapeIndices.has(index) || editingInputIndex === index,
+            'is-hovered': hoverShapeIndex === index,
+            'is-hidden': item.depth === 0,
+          }"
           @mouseenter="hoverShapeIndex = index"
           @mouseleave="hoverShapeIndex = null"
           @click="selectAndFocus(index, $event)"
         >
-          <div flex="~ gap-3 items-center py-3" relative :title="`Shape ${index + 1}`" @click="handleInputAreaClick(index, $event)">
-            <label
-              class="border rounded h-6 min-h-6 min-w-6 w-6 cursor-pointer transition-all duration-200 has-focus:scale-120 has-hover:scale-110"
-              :title="item.sourceGradient && !item.colorOverridden ? `Original gradient; printable color: #${item.color.getHexString()}` : `Color: #${item.color.getHexString()}`"
-              :style="{ background: colorSwatchBackground(item) }"
-            >
-              <input
-                type="color"
-                :aria-label="`Color for shape ${index + 1}`"
-                :value="`#${item.color.getHexString()}`"
-                class="op0 inset-0 absolute z--1"
-                @input="handleColorChange(index, ($event.target as HTMLInputElement).value)"
-                @focus="editingInputIndex = index"
-                @blur="editingInputIndex = null"
+          <div class="shape-row-main">
+            <div class="shape-identity" :title="`Shape ${index + 1}`" @click="handleInputAreaClick(index, $event)">
+              <label
+                class="shape-swatch"
+                :title="item.sourceGradient ? 'Original gradient — choose a custom print color' : `Color: #${item.color.getHexString()}`"
+                :style="{ background: colorSwatchBackground(item) }"
               >
-            </label>
-            <pre min-w-5>{{ index + 1 }}</pre>
-            <details v-if="item.sourceGradient && !item.colorOverridden" class="left-4 top-0.5 absolute">
-              <summary
-                class="text-amber-700 list-none rounded-full bg-amber-100 flex size-5 cursor-pointer items-center justify-center dark:text-amber-200 dark:bg-amber-950 [&::-webkit-details-marker]:hidden"
-                :aria-label="`Gradient warning for shape ${index + 1}`"
-                :title="`Gradient approximated as #${item.color.getHexString()}. Click for printing details.`"
-              >
-                <span class="i-carbon-warning-alt size-3 block" aria-hidden="true" />
-              </summary>
-              <div class="text-sm text-gray-900 p-3 border border-amber-400 rounded bg-white w-64 shadow-lg left--4 top-6 absolute z-10 dark:text-gray-100 dark:bg-gray-900">
-                <p>
-                  This gradient cannot be printed as a gradient in 3MF.
-                  3D preview and 3MF use the approximate solid color #{{ item.color.getHexString() }}.
-                  Choose a color to replace it.
-                </p>
-                <button
-                  type="button"
-                  class="text-sm mt-2 px-2 py-1 rounded bg-amber-100 cursor-pointer dark:bg-amber-900"
-                  @click="handleColorChange(index, `#${item.color.getHexString()}`)"
+                <input
+                  type="color"
+                  :aria-label="`Color for shape ${index + 1}`"
+                  :value="`#${item.color.getHexString()}`"
+                  @input="handleColorChange(index, ($event.target as HTMLInputElement).value)"
+                  @focus="editingInputIndex = index"
+                  @blur="editingInputIndex = null"
                 >
-                  Use this solid color
-                </button>
-              </div>
-            </details>
+              </label>
+              <span class="shape-number">{{ String(index + 1).padStart(2, '0') }}</span>
+            </div>
+            <IconInput
+              :ref="el => inputRefs[index] = (el as any)"
+              :value="item.startZ"
+              icon="i-iconoir-position"
+              type="number"
+              :min="-10"
+              :max="10"
+              :step="0.1"
+              title="Starting Point"
+              class="shape-numeric"
+              @click="handleInputAreaClick(index, $event)"
+              @update:value="handleStartZChange(index, $event)"
+              @focus="editingInputIndex = index"
+              @blur="editingInputIndex = null"
+            />
+            <IconInput
+              :value="item.depth"
+              icon="i-iconoir-extrude"
+              type="number"
+              :min="0"
+              :max="10"
+              :step="0.1"
+              title="Extrude Depth"
+              class="shape-numeric"
+              @click="handleInputAreaClick(index, $event)"
+              @update:value="handleDepthChange(index, $event)"
+              @focus="editingInputIndex = index"
+              @blur="editingInputIndex = null"
+            />
           </div>
-          <IconInput
-            :ref="el => inputRefs[index] = (el as any)"
-            :value="item.startZ"
-            icon="i-iconoir-position"
-            type="number"
-            :min="-10"
-            :max="10"
-            :step="0.1"
-            title="Starting Point"
-            class="py-3 flex-1"
+          <GradientPrintColor
+            v-if="item.sourceGradient"
+            :shape="item"
+            :shape-number="index + 1"
+            @change="handleGradientColorChange(index, $event)"
+            @reset="resetGradientColor(index)"
             @click="handleInputAreaClick(index, $event)"
-            @update:value="handleStartZChange(index, $event)"
-            @focus="editingInputIndex = index"
-            @blur="editingInputIndex = null"
-          />
-          <IconInput
-            :value="item.depth"
-            icon="i-iconoir-extrude"
-            type="number"
-            :min="0"
-            :max="10"
-            :step="0.1"
-            title="Extrude Depth"
-            class="py-3 flex-1"
-            @click="handleInputAreaClick(index, $event)"
-            @update:value="handleDepthChange(index, $event)"
-            @focus="editingInputIndex = index"
-            @blur="editingInputIndex = null"
+            @focusin="editingInputIndex = index"
+            @focusout="editingInputIndex = null"
           />
         </div>
       </div>
@@ -692,3 +698,126 @@ const isLoaded = computed(() => svgShapes.value.length && !isDefaultSvg.value)
     </template>
   </div>
 </template>
+
+<style scoped>
+.shape-list {
+  --shape-ink: #304a3f;
+  --shape-muted: #667e72;
+  --shape-line: #365b451c;
+  --shape-focus: #659c83;
+  --shape-editor-bg: #ffffff55;
+  --shape-active-bg: #ffffff40;
+  color: var(--shape-ink);
+}
+
+.dark .shape-list {
+  --shape-ink: #e0eae4;
+  --shape-muted: #9cafa4;
+  --shape-line: #b6d1c121;
+  --shape-focus: #94b8a6;
+  --shape-editor-bg: #071e172e;
+  --shape-active-bg: #c5e4d30d;
+}
+
+.shape-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.shape-count {
+  color: var(--shape-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.shape-row {
+  padding: 10px 8px;
+  border: 1px solid transparent;
+  border-bottom-color: var(--shape-line);
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    border-color 150ms,
+    background 150ms;
+}
+
+.shape-row:last-child {
+  border-bottom-color: transparent;
+}
+
+.shape-row.is-hovered {
+  background: var(--shape-active-bg);
+}
+
+.shape-row.is-active {
+  border-color: var(--shape-focus);
+  background: var(--shape-active-bg);
+}
+
+.shape-row.is-hidden {
+  opacity: 0.5;
+}
+
+.shape-row-main {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.shape-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.shape-swatch {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #00000010;
+  border-radius: 7px;
+  box-shadow:
+    inset 0 0 0 1px #ffffff24,
+    0 2px 3px #00000008;
+  cursor: pointer;
+}
+
+.shape-swatch:focus-within {
+  outline: 2px solid var(--shape-focus);
+  outline-offset: 3px;
+}
+
+.shape-swatch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.shape-number {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--shape-muted);
+}
+
+.shape-numeric {
+  min-width: 0;
+  font-size: 13px;
+  color: var(--shape-muted);
+}
+
+.shape-numeric :deep(input) {
+  color: var(--shape-ink);
+  border-color: var(--shape-line);
+}
+</style>

@@ -1,5 +1,6 @@
 import type { SvgGradient } from '~/types/three-types'
 import { Color } from 'three'
+import { getGradientPaint } from './gradient'
 
 interface SvgPaint {
   color: string
@@ -89,25 +90,11 @@ function readGradient(node: Element, id: string, reference: string): SvgGradient
 
 /** Integrate the premultiplied sRGB ramp; filament is opaque, but invisible stops must not tint it. */
 function approximateGradient(gradient: SvgGradient): SvgPaint {
-  const stops = gradient.stops
-  const channels = [0, 0, 0]
-  let weight = 0
-  for (let i = 0; i < stops.length; i++) {
-    const stop = stops[i]
-    const before = i === 0 ? stop.offset : (stop.offset - stops[i - 1].offset) / 2
-    const after = i === stops.length - 1 ? 1 - stop.offset : (stops[i + 1].offset - stop.offset) / 2
-    const contribution = (before + after) * stop.opacity
-    weight += contribution
-    for (let channel = 0; channel < channels.length; channel++)
-      channels[channel] += Number.parseInt(stop.color.slice(1 + channel * 2, 3 + channel * 2), 16) * contribution
-  }
-  const color = weight > 0
-    ? `#${channels.map(channel => Math.round(channel / weight + 1e-10).toString(16).padStart(2, '0')).join('')}`
-    : '#000000'
+  const paint = getGradientPaint(gradient)
   return {
-    color,
-    opacity: weight > 0 ? 1 : 0,
-    opaque: stops.length > 0 && stops.every(stop => stop.opacity === 1),
+    color: paint.color,
+    opacity: paint.opacity > 0 ? 1 : 0,
+    opaque: gradient.stops.length > 0 && gradient.stops.every(stop => stop.opacity === 1),
     gradient,
   }
 }
