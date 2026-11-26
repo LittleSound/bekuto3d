@@ -12,6 +12,10 @@ Dragging the slider updates the material immediately. Store the normalized posit
 
 Color selection applies the same solid color to the existing selection. Retain the chosen ramp position only for selected shapes using the same source gradient. Reset restores each selected gradient's own average, leaving shapes without gradients unchanged.
 
+Keep the selection checkbox beside the source swatch and part number. When the part row is too narrow for two readable numeric fields, move Z offset and depth together to a second line with visible labels. Use the row's available width for this decision. Keep the print-color disclosure below both fields.
+
+Opening, editing or closing the disclosure preserves the checkbox selection. Edits from a selected part apply to the selection. Edits from an unselected part affect that part alone. One slider drag creates one undo step across all affected parts, and resetting to Auto creates a separate step. The editor undo shortcut also works while the slider has focus.
+
 ## Key locations
 
 - `src/svg/paint.ts` — paint resolution, gradient provenance and representative colors

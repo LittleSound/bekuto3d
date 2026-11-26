@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { ShapeWithColor } from '~/types/three-types'
+import type { ModelPart } from '~/types/three-types'
 import { getGradientBackground } from '~/svg/gradient'
 
 const props = defineProps<{
-  shape: ShapeWithColor
+  shape: ModelPart
   shapeNumber: number
 }>()
 
