@@ -14,6 +14,10 @@ import { VueRouterAutoImports } from 'vue-router/unplugin'
 import VueRouter from 'vue-router/vite'
 
 export default defineConfig({
+  worker: { format: 'es' },
+  optimizeDeps: {
+    include: ['manifold-3d/lib/wasm'],
+  },
   resolve: {
     alias: {
       '~/': `${path.resolve(import.meta.dirname, 'src')}/`,

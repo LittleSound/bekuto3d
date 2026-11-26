@@ -15,7 +15,8 @@ afterEach(() => vi.unstubAllGlobals())
 async function mountEditor(gradientType = 'linearGradient', stops = '<stop stop-color="red"/><stop offset="1" stop-color="blue"/>', secondGradient = 'g') {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ text: async () => '<svg/>' }))
   const wrapper = mount(SvgTo3D, {
-    global: { stubs: { FileDropZone: true, ModelExporter: true } },
+    attachTo: document.body,
+    global: { stubs: { BaseplateControls: true, FileDropZone: true, ModelExporter: true } },
   })
   await flushPromises()
   await wrapper.get('textarea').setValue(`<svg width="30" height="10" xmlns="http://www.w3.org/2000/svg">
@@ -38,7 +39,7 @@ describe('gradient color editing', () => {
       expect(wrapper.findAll('img').map(image => image.attributes('src'))).toEqual(['/logo-dark.svg', '/logo-light.svg'])
       expect(wrapper.findAll('summary')).toHaveLength(2)
       expect(wrapper.get<HTMLInputElement>('input[type="color"]').element.value).toBe('#800080')
-      expect(wrapper.get('label').attributes('style')).toContain(`${type}-gradient(`)
+      expect(wrapper.get('.shape-swatch').attributes('style')).toContain(`${type}-gradient(`)
       expect(wrapper.text()).toContain('3D preview and 3MF use')
       const source = shapes()[0].sourceGradient
       await wrapper.get('input[type="range"]').setValue('0.25')
@@ -47,13 +48,13 @@ describe('gradient color editing', () => {
       expect(shapes()[0].sourceGradient).toBeUndefined()
       expect(shapes()[0].gradientPosition).toBeUndefined()
       expect(shapes()[0].colorOverridden).toBe(true)
-      expect(wrapper.get('label').element.style.background).toBe('rgb(18, 52, 86)')
+      expect(wrapper.get<HTMLLabelElement>('.shape-swatch').element.style.background).toBe('rgb(18, 52, 86)')
       expect(wrapper.find('summary[aria-label="Print color for shape 1"]').exists()).toBe(false)
       expect(wrapper.find('input[aria-label="Gradient color for shape 1"]').exists()).toBe(false)
       expect(wrapper.findAll('summary')).toHaveLength(1)
       expect(shapes()[1].sourceGradient).toEqual(source)
       expect(shapes()[1].color.getHexString()).toBe('800080')
-      expect(wrapper.findAll('label')[1].attributes('style')).toContain(`${type}-gradient(`)
+      expect(wrapper.findAll('.shape-swatch')[1].attributes('style')).toContain(`${type}-gradient(`)
     }
     finally {
       wrapper.unmount()
@@ -78,7 +79,7 @@ describe('gradient color editing', () => {
       await slider.setValue('0.75')
       expect(shapes()[0].color.getHexString()).toBe('4000bf')
       expect(shapes()[0].gradientPosition).toBe(0.75)
-      expect(wrapper.get('label').attributes('style')).toContain('linear-gradient(')
+      expect(wrapper.get('.shape-swatch').attributes('style')).toContain('linear-gradient(')
       expect(wrapper.findAll('summary')).toHaveLength(2)
     }
     finally {
@@ -108,7 +109,7 @@ describe('gradient color editing', () => {
   it.each(['linear', 'radial'])('shows saved %s gradient stops in the swatch while retaining the printable material color', async (type) => {
     const { wrapper, shapes } = await mountEditor(`${type}Gradient`, '<stop offset="25%" stop-color="red" stop-opacity="0.5"/><stop offset="75%" stop-color="blue"/>')
     try {
-      const style = wrapper.get('label').attributes('style')!
+      const style = wrapper.get('.shape-swatch').attributes('style')!
       expect(style).toContain(`${type}-gradient(`)
       expect(style).toContain('rgba(255, 0, 0, 0.5) 25%')
       expect(style).toContain('rgb(0, 0, 255) 75%')
@@ -137,6 +138,48 @@ describe('gradient color editing', () => {
       expect(wrapper.findAll('.shape-swatch').slice(0, 2).map(swatch => (swatch.element as HTMLElement).style.background)).toEqual(['rgb(171, 205, 239)', 'rgb(171, 205, 239)'])
       expect(wrapper.findAll('summary')).toHaveLength(0)
       expect(wrapper.findAll('input[type="range"]')).toHaveLength(0)
+    }
+    finally {
+      wrapper.unmount()
+    }
+  })
+
+  it.each(['ctrlKey', 'metaKey'])('undoes a reset and a whole batch drag with %s+Z on the slider', async (modifier) => {
+    const { wrapper, shapes } = await mountEditor()
+    try {
+      const checkboxes = wrapper.findAll<HTMLInputElement>('.shape-row input[type="checkbox"]')
+      await checkboxes[0].setValue(true)
+      await checkboxes[1].setValue(true)
+      const slider = wrapper.get<HTMLInputElement>('input[type="range"]')
+      await slider.setValue('0.25')
+      await slider.setValue('0.75')
+      await slider.trigger('pointerup')
+      await wrapper.get('button[aria-label="Reset print color for shape 1"]').trigger('click')
+      const undo = () => slider.trigger('keydown', { key: 'z', [modifier]: true })
+      await undo()
+      expect(shapes().slice(0, 2).map(part => part.gradientPosition)).toEqual([0.75, 0.75])
+      await undo()
+      expect(shapes().map(part => part.color.getHexString())).toEqual(['800080', '800080', '008000'])
+      expect(shapes().every(part => part.gradientPosition === undefined)).toBe(true)
+      expect(checkboxes.map(box => box.element.checked)).toEqual([true, true, false])
+      expect(wrapper.get('button[title^="Undo"]').attributes('disabled')).toBeDefined()
+    }
+    finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('keeps the checkbox selection when editing another part through its disclosure', async () => {
+    const { wrapper, shapes } = await mountEditor()
+    try {
+      const checkboxes = wrapper.findAll<HTMLInputElement>('.shape-row input[type="checkbox"]')
+      await checkboxes[0].setValue(true)
+      await checkboxes[2].setValue(true)
+      await wrapper.get('summary[aria-label="Print color for shape 2"]').trigger('click')
+      await wrapper.get('input[aria-label="Gradient color for shape 2"]').setValue('0.25')
+      await wrapper.get('button[aria-label="Close print color editor for shape 2"]').trigger('click')
+      expect(shapes().map(part => part.color.getHexString())).toEqual(['800080', 'bf0040', '008000'])
+      expect(checkboxes.map(box => box.element.checked)).toEqual([true, false, true])
     }
     finally {
       wrapper.unmount()

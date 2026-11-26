@@ -8,6 +8,7 @@ interface Props {
   min?: number
   max?: number
   step?: number
+  label?: string
   title?: string
   class?: string
 }
@@ -61,9 +62,11 @@ defineExpose({
 
 <template>
   <div class="inline-flex gap-2 items-center" :class="[props.class]" :title="title" @click="focus()">
-    <span class="h-[1.2em] min-h-[1.2em] min-w-[1.2em] w-[1.2em]" :class="[icon]" inline-block />
+    <span class="input-icon h-[1.2em] min-h-[1.2em] min-w-[1.2em] w-[1.2em]" :class="[icon]" inline-block />
+    <span v-if="label" class="input-label hidden">{{ label }}</span>
     <input
       ref="inputRef"
+      :aria-label="label"
       :type="type || 'text'"
       :min="min"
       :max="max"
